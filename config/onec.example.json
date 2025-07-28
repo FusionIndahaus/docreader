@@ -1,0 +1,39 @@
+{
+  "base_url": "http://your-1c-server:port/your-base",
+  "username": "your_username",
+  "password": "your_password",
+  "timeout": 30,
+  "enabled": true,
+  "auto_send": false,
+  "mapping": {
+    "invoice": {
+      "target_object": "Документ.ПоступлениеТоваровУслуг",
+      "fields": {
+        "supplier": "Поставщик",
+        "date": "Дата",
+        "amount": "СуммаДокумента",
+        "invoice_number": "Номер",
+        "description": "Комментарий"
+      }
+    },
+    "contract": {
+      "target_object": "Документ.ДоговорКонтрагента", 
+      "fields": {
+        "contractor": "Контрагент",
+        "contract_date": "ДатаДоговора",
+        "contract_number": "НомерДоговора",
+        "amount": "СуммаДоговора",
+        "description": "Предмет"
+      }
+    },
+    "receipt": {
+      "target_object": "Документ.ПоступлениеНаличных",
+      "fields": {
+        "amount": "СуммаДокумента",
+        "date": "Дата", 
+        "description": "НазначениеПлатежа",
+        "payer": "ОтКого"
+      }
+    }
+  }
+} 

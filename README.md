@@ -17,7 +17,7 @@
 
 ```bash
 # Клонируем репозиторий
-git clone <your-repo-url>
+git clone https://github.com/FusionIndahaus/docreader.git
 cd document-ai
 
 # Запускаем приложение
@@ -38,23 +38,6 @@ const (
     serverPort    = "8080"
     maxFileSize   = 50 << 20 // 50MB
 )
-```
-
-## 📁 Структура проекта
-
-```
-document-ai/
-├── main.go              # Основной сервер (Go)
-├── static/
-│   ├── index.html       # Главная страница
-│   ├── styles.css       # Стили
-│   └── script.js        # Frontend логика
-├── go.mod               # Go модуль
-├── README.md            # Документация
-└── deploy/              # Файлы для деплоя
-    ├── Dockerfile
-    ├── docker-compose.yml
-    └── nginx.conf
 ```
 
 ## 🔧 API Endpoints

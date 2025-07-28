@@ -1,0 +1,29 @@
+[Unit]
+Description=N8N Uploader Service
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/n8nuploader
+ExecStart=/opt/n8nuploader/n8nuploader
+Restart=always
+RestartSec=5
+Environment=PORT=8080
+Environment=GO_ENV=production
+
+# Логирование
+StandardOutput=journal
+StandardError=journal
+
+# Безопасность
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/n8nuploader
+ReadWritePaths=/tmp
+
+[Install]
+WantedBy=multi-user.target 

@@ -1,0 +1,72 @@
+# Document AI - файлы для игнорирования
+
+# Собранные бинарники
+document-ai
+documind
+n8nuploader
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Тестовые файлы
+*.test
+*.out
+coverage.txt
+
+# Go workspace файлы
+go.work
+go.work.sum
+
+# Зависимости (vendor обычно не коммитим)
+vendor/
+
+# IDE и редакторы
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS файлы
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Логи и временные файлы
+*.log
+*.tmp
+*.temp
+tmp/
+temp/
+
+# Конфигурационные файлы с секретами
+.env
+.env.local
+.env.production
+config.local.yml
+secrets.yml
+
+# Загруженные файлы (если есть папка uploads)
+uploads/
+files/
+
+# Архивы деплоя
+*.tar.gz
+*.zip
+
+# Docker volumes
+docker-data/
+
+# Backup файлы
+*.backup
+*.bak
+
+# Local development файлы
+local/
+dev/ 

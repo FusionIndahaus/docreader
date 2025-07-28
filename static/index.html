@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Интеллектуальная обработка документов</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Интеллектуальная обработка документов</h1>
+            <p class="subtitle">Загрузите ваш документ или изображение для анализа. Наш сервис обработает информацию и предоставит подробный отчет с результатами.</p>
+        </header>
+        
+        <main>
+            <div class="card">
+                <form id="uploadForm" action="/submit" method="post" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="message">Опишите документ:</label>
+                        <textarea id="message" name="message" rows="5" placeholder="Укажите, что вы хотите узнать о документе или какую информацию нужно извлечь..." required></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="file">Выберите PDF или изображение:</label>
+                        <div class="file-input-container">
+                            <input type="file" id="file" name="file" accept=".pdf, .jpg, .jpeg, .png" required>
+                            <label for="file" class="file-label">
+                                <span class="file-text">Выберите файл</span>
+                            </label>
+                            <span id="file-name" class="file-name">Файл не выбран</span>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <button type="submit" id="submitBtn">Начать обработку</button>
+                    </div>
+                </form>
+            </div>
+            
+            <div class="card feature-list">
+                <h3>Возможности системы</h3>
+                <ul class="features">
+                    <li class="feature-item">
+                        <span class="feature-icon">📄</span>
+                        <div class="feature-content">
+                            <h4>Распознавание текста</h4>
+                            <p>Извлечение текста из PDF-документов и изображений с высокой точностью</p>
+                        </div>
+                    </li>
+                    <li class="feature-item">
+                        <span class="feature-icon">🔍</span>
+                        <div class="feature-content">
+                            <h4>Интеллектуальный анализ</h4>
+                            <p>Определение ключевых фактов, дат, имен и других важных данных</p>
+                        </div>
+                    </li>
+                    <li class="feature-item">
+                        <span class="feature-icon">📊</span>
+                        <div class="feature-content">
+                            <h4>Структурированные данные</h4>
+                            <p>Представление результатов в удобном формате для дальнейшей обработки</p>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+            
+            <div id="statusMessage" class="status-message"></div>
+            
+            <div class="card response-section">
+                <div class="response-header">
+                    <h2>Результаты анализа</h2>
+                    <div class="response-controls">
+                        <button id="refreshBtn" class="refresh-btn">Обновить результаты</button>
+                    </div>
+                </div>
+                <div id="responseList" class="response-list">
+                    <p class="no-data">Ожидание данных...</p>
+                </div>
+            </div>
+        </main>
+        
+        <footer>
+            <p>&copy; 2023 Система интеллектуальной обработки документов | Разработано с использованием n8n</p>
+        </footer>
+    </div>
+    
+    <script src="/static/script.js"></script>
+</body>
+</html> 

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"document-ai/pkg/onec"
 )
 
 // Конфигурация приложения
@@ -30,10 +32,11 @@ type DocumentRequest struct {
 }
 
 type ProcessingResponse struct {
-	ID        string    `json:"id"`
-	Text      string    `json:"text"`
-	Timestamp time.Time `json:"timestamp"`
-	Status    string    `json:"status"`
+	ID         string                  `json:"id"`
+	Text       string                  `json:"text"`
+	Timestamp  time.Time               `json:"timestamp"`
+	Status     string                  `json:"status"`
+	OneCStatus *onec.IntegrationResult `json:"onec_status,omitempty"` // Новое поле для статуса 1С
 }
 
 type APIResponse struct {
@@ -43,15 +46,36 @@ type APIResponse struct {
 }
 
 // Глобальное состояние приложения
-// Да, знаю что глобальные переменные не очень, но для простого приложения сойдет
 var (
 	responses      []ProcessingResponse
-	responsesMutex sync.RWMutex // RWMutex чтобы читать могли несколько горутин одновременно
+	responsesMutex sync.RWMutex
+	oneCService    *onec.OneCService // Сервис интеграции с 1С
 )
 
 func main() {
+	// Инициализируем сервис интеграции с 1С
+	initOneCIntegration()
+
 	setupRoutes()
 	startServer()
+}
+
+// Инициализация интеграции с 1С
+func initOneCIntegration() {
+	service, err := onec.NewOneCService("config/onec.json")
+	if err != nil {
+		log.Printf("WARNING: Не удалось инициализировать интеграцию с 1С: %v", err)
+		log.Println("INFO: Приложение будет работать без интеграции с 1С")
+		return
+	}
+
+	oneCService = service
+
+	if oneCService.IsEnabled() {
+		log.Println("INFO: Интеграция с 1С активна")
+	} else {
+		log.Println("INFO: Интеграция с 1С отключена в конфигурации")
+	}
 }
 
 // Настраиваем все роуты
@@ -67,16 +91,20 @@ func setupRoutes() {
 	http.HandleFunc("/results", handleGetResults) // получение результатов обработки
 	http.HandleFunc("/health", handleHealthCheck) // проверка здоровья сервиса
 
-	log.Println("🚀 Роуты настроены, готов к работе!")
+	// Новые эндпоинты для 1С
+	http.HandleFunc("/onec/status", handleOneCStatus)   // статус интеграции с 1С
+	http.HandleFunc("/onec/send", handleOneCManualSend) // ручная отправка в 1С
+
+	log.Println("INFO: Document AI готов к работе")
 }
 
 // Запускаем веб-сервер
 func startServer() {
-	log.Printf("Сервер запускается на порту %s", serverPort)
-	log.Printf("Откройте http://localhost:%s в браузере", serverPort)
+	log.Printf("INFO: Document AI запускается на порту %s", serverPort)
+	log.Printf("INFO: Откройте http://localhost:%s в браузере", serverPort)
 
 	if err := http.ListenAndServe(":"+serverPort, nil); err != nil {
-		log.Fatal("Не удалось запустить сервер:", err)
+		log.Fatal("ERROR: Не удалось запустить сервер:", err)
 	}
 }
 
@@ -94,7 +122,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 // Обработка загрузки файлов - основная фишка приложения
 func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		sendJSONError(w, "Только POST запросы, друг!", http.StatusMethodNotAllowed)
+		sendJSONError(w, "Только POST запросы", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -107,7 +135,7 @@ func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 	// Достаем данные из формы
 	message := strings.TrimSpace(r.FormValue("message"))
 	if message == "" {
-		sendJSONError(w, "Описание документа обязательно!", http.StatusBadRequest)
+		sendJSONError(w, "Описание документа обязательно", http.StatusBadRequest)
 		return
 	}
 
@@ -125,16 +153,16 @@ func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Получен файл: %s (размер: %d байт)", header.Filename, header.Size)
+	log.Printf("INFO: Получен файл: %s (размер: %d байт)", header.Filename, header.Size)
 
 	// Отправляем в n8n
 	if err := sendToN8n(message, file, header.Filename); err != nil {
-		log.Printf("Ошибка отправки в n8n: %v", err)
+		log.Printf("ERROR: Ошибка отправки в n8n: %v", err)
 		sendJSONError(w, "Не удалось обработать документ: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("Файл %s успешно отправлен в n8n", header.Filename)
+	log.Printf("INFO: Файл %s успешно отправлен в n8n", header.Filename)
 	sendJSONResponse(w, APIResponse{
 		Status:  "success",
 		Message: "Документ отправлен на обработку! Результаты появятся ниже через несколько минут.",
@@ -151,30 +179,30 @@ func handleN8nWebhook(w http.ResponseWriter, r *http.Request) {
 	// Читаем тело запроса
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Printf("Ошибка чтения webhook от n8n: %v", err)
+		log.Printf("ERROR: Ошибка чтения webhook от n8n: %v", err)
 		sendJSONError(w, "Не удалось прочитать данные", http.StatusBadRequest)
 		return
 	}
 	defer r.Body.Close()
 
 	// Пытаемся распарсить JSON
-	var webhookData struct {
-		Text   string `json:"text"`
-		Status string `json:"status"`
-	}
-
-	responseText := ""
+	var webhookData map[string]interface{}
+	var responseText string
 	status := "completed"
 
 	// Если пришел JSON - парсим его
-	if err := json.Unmarshal(body, &webhookData); err == nil && webhookData.Text != "" {
-		responseText = webhookData.Text
-		if webhookData.Status != "" {
-			status = webhookData.Status
+	if err := json.Unmarshal(body, &webhookData); err == nil {
+		if text, ok := webhookData["text"].(string); ok && text != "" {
+			responseText = text
+		}
+		if statusValue, ok := webhookData["status"].(string); ok && statusValue != "" {
+			status = statusValue
 		}
 	} else {
 		// Если это просто текст - используем как есть
 		responseText = string(body)
+		webhookData = make(map[string]interface{})
+		webhookData["text"] = responseText
 	}
 
 	if responseText == "" {
@@ -182,12 +210,22 @@ func handleN8nWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Сохраняем результат
+	// Создаем результат обработки
 	response := ProcessingResponse{
 		ID:        generateSimpleID(),
 		Text:      responseText,
 		Timestamp: time.Now(),
 		Status:    status,
+	}
+
+	// Попытка интеграции с 1С
+	if oneCService != nil {
+		log.Println("INFO: Отправляем данные в 1С...")
+		oneCResult, err := oneCService.ProcessN8nResponse(webhookData)
+		if err != nil {
+			log.Printf("ERROR: Ошибка интеграции с 1С: %v", err)
+		}
+		response.OneCStatus = oneCResult
 	}
 
 	responsesMutex.Lock()
@@ -198,10 +236,68 @@ func handleN8nWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	responsesMutex.Unlock()
 
-	log.Printf("Получен результат от n8n: %s... (статус: %s)",
+	log.Printf("INFO: Получен результат от n8n: %s... (статус: %s)",
 		truncateString(responseText, 50), status)
 
 	sendJSONResponse(w, APIResponse{Status: "success", Message: "Результат сохранен"})
+}
+
+// Статус интеграции с 1С
+func handleOneCStatus(w http.ResponseWriter, r *http.Request) {
+	if oneCService == nil {
+		sendJSONResponse(w, APIResponse{
+			Status: "success",
+			Data: map[string]interface{}{
+				"enabled":    false,
+				"connection": "not_configured",
+				"message":    "Интеграция с 1С не настроена",
+			},
+		})
+		return
+	}
+
+	status := oneCService.GetStatus()
+	sendJSONResponse(w, APIResponse{
+		Status: "success",
+		Data:   status,
+	})
+}
+
+// Ручная отправка в 1С
+func handleOneCManualSend(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		sendJSONError(w, "Только POST", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if oneCService == nil {
+		sendJSONError(w, "Интеграция с 1С не настроена", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Читаем данные запроса
+	var requestData struct {
+		DocumentID string                 `json:"document_id"`
+		Data       map[string]interface{} `json:"data"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
+		sendJSONError(w, "Неверный формат данных", http.StatusBadRequest)
+		return
+	}
+
+	// Отправляем в 1С
+	result, err := oneCService.SendManually(requestData.DocumentID, requestData.Data)
+	if err != nil {
+		log.Printf("ERROR: Ошибка ручной отправки в 1С: %v", err)
+		sendJSONError(w, fmt.Sprintf("Ошибка отправки в 1С: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	sendJSONResponse(w, APIResponse{
+		Status: "success",
+		Data:   result,
+	})
 }
 
 // Отдаем сохраненные результаты обработки
@@ -219,9 +315,25 @@ func handleGetResults(w http.ResponseWriter, r *http.Request) {
 
 // Простая проверка здоровья сервиса
 func handleHealthCheck(w http.ResponseWriter, r *http.Request) {
+	health := map[string]interface{}{
+		"status":    "healthy",
+		"message":   "Document AI работает нормально",
+		"timestamp": time.Now().Format(time.RFC3339),
+		"version":   "2.0.0",
+	}
+
+	// Добавляем статус интеграции с 1С
+	if oneCService != nil {
+		health["onec_integration"] = oneCService.GetStatus()
+	} else {
+		health["onec_integration"] = map[string]string{
+			"status": "not_configured",
+		}
+	}
+
 	sendJSONResponse(w, APIResponse{
-		Status:  "healthy",
-		Message: "Сервер работает нормально",
+		Status: "success",
+		Data:   health,
 	})
 }
 
@@ -313,7 +425,7 @@ func sendJSONResponse(w http.ResponseWriter, data interface{}) {
 	w.WriteHeader(http.StatusOK)
 
 	if err := json.NewEncoder(w).Encode(data); err != nil {
-		log.Printf("Ошибка кодирования JSON: %v", err)
+		log.Printf("ERROR: Ошибка кодирования JSON: %v", err)
 	}
 }
 

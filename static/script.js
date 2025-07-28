@@ -27,11 +27,11 @@ class DocumentAIApp {
     }
     
     init() {
-        console.log('🚀 Document AI загружается...');
+        console.log('INFO: Document AI загружается...');
         this.setupEventListeners();
         this.loadExistingResults();
         this.animateOnLoad();
-        console.log('✅ Document AI готов к работе!');
+        console.log('INFO: Document AI готов к работе');
     }
     
     // Настройка всех обработчиков событий
@@ -87,7 +87,7 @@ class DocumentAIApp {
         e.preventDefault();
         
         if (this.isUploading) {
-            console.log('⏳ Уже идет загрузка, пропускаем...');
+            console.log('INFO: Уже идет загрузка, пропускаем...');
             return;
         }
         
@@ -95,7 +95,7 @@ class DocumentAIApp {
             this.validateForm();
             await this.uploadDocument();
         } catch (error) {
-            console.error('Ошибка отправки:', error);
+            console.error('ERROR: Ошибка отправки:', error);
             this.showError(error.message);
         }
     }
@@ -122,7 +122,7 @@ class DocumentAIApp {
             throw new Error('Файл слишком большой. Максимальный размер: 50 МБ');
         }
         
-        console.log('Форма валидна');
+        console.log('INFO: Форма валидна');
     }
     
     // Загрузка документа на сервер
@@ -131,7 +131,7 @@ class DocumentAIApp {
         this.setLoadingState(true);
         
         try {
-            console.log('Отправляем документ на обработку...');
+            console.log('INFO: Отправляем документ на обработку...');
             
             const formData = new FormData();
             formData.append('message', document.getElementById('message').value.trim());
@@ -148,7 +148,7 @@ class DocumentAIApp {
                 throw new Error(result.message || `Ошибка сервера: ${response.status}`);
             }
             
-            console.log('Документ успешно отправлен');
+            console.log('INFO: Документ успешно отправлен');
             this.showSuccess(result.message);
             this.clearForm();
             
@@ -156,7 +156,7 @@ class DocumentAIApp {
             setTimeout(() => this.loadExistingResults(), 2000);
             
         } catch (error) {
-            console.error('Ошибка загрузки:', error);
+            console.error('ERROR: Ошибка загрузки:', error);
             throw error;
         } finally {
             this.isUploading = false;
@@ -195,7 +195,7 @@ class DocumentAIApp {
         
         this.selectedFile = file;
         this.updateFilePreview(file);
-        console.log(`Выбран файл: ${file.name} (${this.formatFileSize(file.size)})`);
+        console.log(`INFO: Выбран файл: ${file.name} (${this.formatFileSize(file.size)})`);
     }
     
     // Обновление превью файла
@@ -221,13 +221,13 @@ class DocumentAIApp {
         this.filePreview.style.display = 'none';
         this.fileUploadArea.querySelector('.file-upload-content').style.display = 'block';
         
-        console.log('Файл удален');
+        console.log('INFO: Файл удален');
     }
     
     // Загрузка существующих результатов
     async loadExistingResults() {
         try {
-            console.log('🔄 Загружаем результаты...');
+            console.log('INFO: Загружаем результаты...');
             
             const response = await fetch('/results');
             const data = await response.json();
@@ -242,7 +242,7 @@ class DocumentAIApp {
             }
             
         } catch (error) {
-            console.error('Ошибка загрузки результатов:', error);
+            console.error('ERROR: Ошибка загрузки результатов:', error);
         }
     }
     
@@ -274,12 +274,12 @@ class DocumentAIApp {
                     <div class="result-text">${this.formatResultText(result.text)}</div>
                 </div>
                 <div class="result-actions">
-                    <button class="copy-btn" onclick="app.copyToClipboard('${result.id}')">📋 Копировать</button>
+                    <button class="copy-btn" onclick="app.copyToClipboard('${result.id}')">Копировать</button>
                 </div>
             </div>
         `).join('');
         
-        console.log(`📊 Отображено результатов: ${sortedResults.length}`);
+        console.log(`INFO: Отображено результатов: ${sortedResults.length}`);
     }
     
     // Очистка всех результатов (только UI)
@@ -288,7 +288,7 @@ class DocumentAIApp {
             this.results = [];
             this.renderResults([]);
             this.clearBtn.style.display = 'none';
-            console.log('🧹 Результаты очищены');
+            console.log('INFO: Результаты очищены');
         }
     }
     
@@ -299,9 +299,9 @@ class DocumentAIApp {
         
         try {
             await navigator.clipboard.writeText(result.text);
-            this.showSuccess('Текст скопирован в буфер обмена!');
+            this.showSuccess('Текст скопирован в буфер обмена');
         } catch (error) {
-            console.error('Ошибка копирования:', error);
+            console.error('ERROR: Ошибка копирования:', error);
             this.showError('Не удалось скопировать текст');
         }
     }
@@ -367,12 +367,12 @@ class DocumentAIApp {
     getFileIcon(filename) {
         const ext = filename.split('.').pop().toLowerCase();
         const icons = {
-            'pdf': '📕',
-            'jpg': '🖼️',
-            'jpeg': '🖼️', 
-            'png': '🖼️'
+            'pdf': '[PDF]',
+            'jpg': '[IMG]',
+            'jpeg': '[IMG]', 
+            'png': '[IMG]'
         };
-        return icons[ext] || '📄';
+        return icons[ext] || '[FILE]';
     }
     
     formatTime(timestamp) {
@@ -394,12 +394,12 @@ class DocumentAIApp {
     
     getStatusText(status) {
         const statusTexts = {
-            'completed': '✅ Готово',
-            'processing': '⏳ Обработка',
-            'error': '❌ Ошибка',
-            'pending': '⏸️ Ожидание'
+            'completed': 'Готово',
+            'processing': 'Обработка',
+            'error': 'Ошибка',
+            'pending': 'Ожидание'
         };
-        return statusTexts[status] || '✅ Готово';
+        return statusTexts[status] || 'Готово';
     }
     
     formatResultText(text) {
@@ -437,7 +437,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Обработка ошибок JavaScript
 window.addEventListener('error', (event) => {
-    console.error('💥 JavaScript Error:', event.error);
+    console.error('ERROR: JavaScript Error:', event.error);
     if (app) {
         app.showError('Произошла непредвиденная ошибка. Попробуйте обновить страницу.');
     }
@@ -445,7 +445,7 @@ window.addEventListener('error', (event) => {
 
 // Обработка отклоненных промисов
 window.addEventListener('unhandledrejection', (event) => {
-    console.error('💥 Unhandled Promise Rejection:', event.reason);
+    console.error('ERROR: Unhandled Promise Rejection:', event.reason);
     if (app) {
         app.showError('Ошибка сети или сервера. Проверьте соединение.');
     }

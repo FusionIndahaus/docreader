@@ -8,21 +8,26 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"document-ai/pkg/onec"
+
+	"github.com/joho/godotenv"
 )
 
-// Конфигурация приложения
-const (
-	// URL вебхука n8n - сюда отправляем все файлы
-	n8nWebhookURL = "https://qbitagents.app.n8n.cloud/webhook-test/d8f99a21-dc92-4dac-9746-6581ce15df8f"
-	serverPort    = "8080"
-	maxFileSize   = 50 << 20 // 50MB - думаю, хватит для большинства документов
-	maxResponses  = 20       // храним последние 20 ответов
+// Конфигурация приложения - теперь читается из переменных окружения
+var (
+	n8nWebhookURL  string
+	serverPort     string
+	maxFileSize    int64
+	maxResponses   int
+	staticDir      string
+	onecConfigPath string
 )
 
 // Структуры данных
@@ -53,6 +58,9 @@ var (
 )
 
 func main() {
+	// Инициализируем переменные окружения
+	initEnvVariables()
+
 	// Инициализируем сервис интеграции с 1С
 	initOneCIntegration()
 
@@ -60,9 +68,67 @@ func main() {
 	startServer()
 }
 
+// Инициализация переменных окружения
+func initEnvVariables() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Printf("WARNING: Не удалось загрузить переменные окружения из .env файла: %v", err)
+		log.Println("INFO: Используются значения по умолчанию.")
+	}
+
+	n8nWebhookURL = os.Getenv("N8N_WEBHOOK_URL")
+	if n8nWebhookURL == "" {
+		n8nWebhookURL = "https://qbitagents.app.n8n.cloud/webhook-test/d8f99a21-dc92-4dac-9746-6581ce15df8f"
+		log.Printf("INFO: N8N_WEBHOOK_URL не установлен, используется дефолт: %s", n8nWebhookURL)
+	}
+
+	serverPort = os.Getenv("SERVER_PORT")
+	if serverPort == "" {
+		serverPort = "8080"
+		log.Printf("INFO: SERVER_PORT не установлен, используется дефолт: %s", serverPort)
+	}
+
+	maxFileSizeStr := os.Getenv("MAX_FILE_SIZE_MB")
+	if maxFileSizeStr == "" {
+		maxFileSize = 50 << 20 // 50MB по умолчанию
+		log.Printf("INFO: MAX_FILE_SIZE_MB не установлен, используется дефолт: %d MB", maxFileSize>>20)
+	} else {
+		maxFileSizeMB, err := strconv.ParseInt(maxFileSizeStr, 10, 64)
+		if err != nil {
+			log.Fatalf("ERROR: Неверный формат MAX_FILE_SIZE_MB: %v", err)
+		}
+		maxFileSize = maxFileSizeMB << 20 // Преобразуем MB в байты
+		log.Printf("INFO: MAX_FILE_SIZE_MB установлен: %d MB", maxFileSizeMB)
+	}
+
+	maxResponsesStr := os.Getenv("MAX_RESPONSES")
+	if maxResponsesStr == "" {
+		maxResponses = 20 
+		log.Printf("INFO: MAX_RESPONSES не установлен, используется дефолт: %d", maxResponses)
+	} else {
+		maxResponses, err = strconv.Atoi(maxResponsesStr)
+		if err != nil {
+			log.Fatalf("ERROR: Неверный формат MAX_RESPONSES: %v", err)
+		}
+		log.Printf("INFO: MAX_RESPONSES установлен: %d", maxResponses)
+	}
+
+	staticDir = os.Getenv("STATIC_DIR")
+	if staticDir == "" {
+		staticDir = "static"
+		log.Printf("INFO: STATIC_DIR не установлен, используется дефолт: %s", staticDir)
+	}
+
+	onecConfigPath = os.Getenv("ONEC_CONFIG_PATH")
+	if onecConfigPath == "" {
+		onecConfigPath = "config/onec.json"
+		log.Printf("INFO: ONEC_CONFIG_PATH не установлен, используется дефолт: %s", onecConfigPath)
+	}
+}
+
 // Инициализация интеграции с 1С
 func initOneCIntegration() {
-	service, err := onec.NewOneCService("config/onec.json")
+	service, err := onec.NewOneCService(onecConfigPath)
 	if err != nil {
 		log.Printf("WARNING: Не удалось инициализировать интеграцию с 1С: %v", err)
 		log.Println("INFO: Приложение будет работать без интеграции с 1С")
@@ -81,7 +147,7 @@ func initOneCIntegration() {
 // Настраиваем все роуты
 func setupRoutes() {
 	// Статические файлы (CSS, JS, картинки если будут)
-	fs := http.FileServer(http.Dir("static"))
+	fs := http.FileServer(http.Dir(staticDir))
 	http.Handle("/static/", http.StripPrefix("/static/", fs))
 
 	// Основные эндпоинты
@@ -116,7 +182,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.ServeFile(w, r, "static/index.html")
+	http.ServeFile(w, r, staticDir+"/index.html")
 }
 
 // Обработка загрузки файлов - основная фишка приложения

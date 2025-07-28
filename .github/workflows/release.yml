@@ -1,0 +1,127 @@
+name: Release
+
+# Запускать при создании тега
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    name: Создание релиза
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout код
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Установка Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+        
+    - name: Установка зависимостей
+      run: go mod tidy
+      
+    - name: Запуск тестов перед релизом
+      run: go test -v ./...
+      
+    - name: Сборка для различных платформ
+      run: |
+        mkdir -p builds
+        
+        # Linux AMD64
+        GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=${GITHUB_REF_NAME}" -o builds/document-ai-linux-amd64 main.go
+        
+        # Linux ARM64
+        GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version=${GITHUB_REF_NAME}" -o builds/document-ai-linux-arm64 main.go
+        
+        # Windows AMD64
+        GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.version=${GITHUB_REF_NAME}" -o builds/document-ai-windows-amd64.exe main.go
+        
+        # macOS AMD64
+        GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -X main.version=${GITHUB_REF_NAME}" -o builds/document-ai-macos-amd64 main.go
+        
+        # macOS ARM64 (M1/M2)
+        GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w -X main.version=${GITHUB_REF_NAME}" -o builds/document-ai-macos-arm64 main.go
+        
+        echo "OK: Сборка для всех платформ завершена"
+        
+    - name: Создание архивов
+      run: |
+        cd builds
+        
+        # Linux
+        tar -czf document-ai-${GITHUB_REF_NAME}-linux-amd64.tar.gz document-ai-linux-amd64
+        tar -czf document-ai-${GITHUB_REF_NAME}-linux-arm64.tar.gz document-ai-linux-arm64
+        
+        # Windows
+        zip document-ai-${GITHUB_REF_NAME}-windows-amd64.zip document-ai-windows-amd64.exe
+        
+        # macOS
+        tar -czf document-ai-${GITHUB_REF_NAME}-macos-amd64.tar.gz document-ai-macos-amd64
+        tar -czf document-ai-${GITHUB_REF_NAME}-macos-arm64.tar.gz document-ai-macos-arm64
+        
+        echo "OK: Архивы созданы"
+        
+    - name: Сборка и публикация Docker образа
+      env:
+        REGISTRY: ghcr.io
+        IMAGE_NAME: ${{ github.repository }}
+      run: |
+        echo ${{ secrets.GITHUB_TOKEN }} | docker login $REGISTRY -u ${{ github.actor }} --password-stdin
+        
+        docker build -t $REGISTRY/$IMAGE_NAME:${{ github.ref_name }} .
+        docker build -t $REGISTRY/$IMAGE_NAME:latest .
+        
+        docker push $REGISTRY/$IMAGE_NAME:${{ github.ref_name }}
+        docker push $REGISTRY/$IMAGE_NAME:latest
+        
+        echo "OK: Docker образ опубликован"
+        
+    - name: Генерация changelog
+      id: changelog
+      run: |
+        # Получаем предыдущий тег
+        PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        
+        # Генерируем changelog
+        if [ -n "$PREV_TAG" ]; then
+          echo "## Изменения с $PREV_TAG до ${GITHUB_REF_NAME}" > CHANGELOG.md
+          echo "" >> CHANGELOG.md
+          git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%an)" --no-merges >> CHANGELOG.md
+        else
+          echo "## Первый релиз ${GITHUB_REF_NAME}" > CHANGELOG.md
+          echo "" >> CHANGELOG.md
+          echo "Первый релиз Document AI!" >> CHANGELOG.md
+        fi
+        
+        echo "OK: Changelog сгенерирован"
+        
+    - name: Создание GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        body_path: CHANGELOG.md
+        files: |
+          builds/document-ai-*.tar.gz
+          builds/document-ai-*.zip
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Уведомление об успешном релизе
+      run: |
+        echo "SUCCESS: Релиз ${GITHUB_REF_NAME} успешно создан!"
+        echo "Доступны сборки для:"
+        echo "  - Linux (AMD64, ARM64)"
+        echo "  - Windows (AMD64)"
+        echo "  - macOS (AMD64, ARM64)"
+        echo "Docker образ: ghcr.io/${{ github.repository }}:${GITHUB_REF_NAME}" 

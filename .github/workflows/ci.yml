@@ -1,0 +1,228 @@
+name: CI/CD Pipeline
+
+# Запускать при пуше в main и при создании pull request
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+# Права доступа для GITHUB_TOKEN
+permissions:
+  contents: read
+  checks: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  # Джоб для тестирования
+  test:
+    name: Тестирование
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout код
+      uses: actions/checkout@v4
+      
+    - name: Установка Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+        
+    - name: Кеширование модулей Go
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+          
+    - name: Установка зависимостей
+      run: go mod tidy
+      
+    - name: Проверка форматирования
+      run: |
+        if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+          echo "ОШИБКА: Код не отформатирован. Запустите 'gofmt -s -w .'"
+          gofmt -s -l .
+          exit 1
+        fi
+        echo "OK: Код отформатирован правильно"
+        
+    - name: Статический анализ
+      run: |
+        go vet ./...
+        echo "OK: Статический анализ пройден"
+        
+    - name: Запуск юнит тестов
+      run: |
+        go test -v -race -coverprofile=coverage.out ./...
+        go tool cover -html=coverage.out -o coverage.html
+        echo "OK: Все тесты пройдены"
+        
+    - name: Публикация отчёта о покрытии
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-report
+        path: coverage.html
+        
+    - name: Анализ покрытия тестами
+      id: coverage
+      run: |
+        COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}')
+        COVERAGE_NUM=${COVERAGE%\%}
+        echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
+        echo "coverage_num=$COVERAGE_NUM" >> $GITHUB_OUTPUT
+        echo "Покрытие тестами: $COVERAGE"
+        
+        # Генерируем детальный отчёт
+        echo "## Покрытие по файлам:" > coverage_report.md
+        go tool cover -func=coverage.out | grep -v "total:" >> coverage_report.md
+        echo "" >> coverage_report.md
+        echo "**Общее покрытие: $COVERAGE**" >> coverage_report.md
+        
+        if [[ $COVERAGE_NUM -lt 50 ]]; then
+          echo "status=warning" >> $GITHUB_OUTPUT
+          echo "ВНИМАНИЕ: Покрытие тестами менее 50%"
+        else
+          echo "status=success" >> $GITHUB_OUTPUT
+          echo "OK: Хорошее покрытие тестами"
+        fi
+
+    - name: Комментарий с покрытием в PR
+      uses: marocchino/sticky-pull-request-comment@v2
+      if: github.event_name == 'pull_request'
+      with:
+        recreate: true
+        header: coverage
+        message: |
+          ## Отчёт о покрытии тестами
+          
+          **Общее покрытие: ${{ steps.coverage.outputs.coverage }}**
+          
+          <details>
+          <summary>Детальное покрытие по файлам</summary>
+          
+          ```
+          $(cat coverage_report.md)
+          ```
+          
+          </details>
+          
+          ${{ steps.coverage.outputs.status == 'warning' && '⚠️ Покрытие менее 50%' || '✅ Покрытие в норме' }}
+
+  # Джоб для сборки (только после успешных тестов)
+  build:
+    name: Сборка
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - name: Checkout код
+      uses: actions/checkout@v4
+      
+    - name: Установка Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+        
+    - name: Установка зависимостей
+      run: go mod tidy
+      
+    - name: Сборка приложения
+      run: |
+        go build -ldflags="-s -w" -o document-ai main.go
+        echo "OK: Сборка успешна"
+        
+    - name: Проверка Docker
+      run: |
+        if [ -f "Dockerfile" ]; then
+          echo "Проверка Docker образа..."
+          docker build -t document-ai:test .
+          echo "OK: Docker образ собран успешно"
+        else
+          echo "WARNING: Dockerfile не найден, пропускаем Docker сборку"
+        fi
+        
+    - name: Публикация артефактов
+      uses: actions/upload-artifact@v3
+      with:
+        name: document-ai-binary
+        path: document-ai
+
+  # Джоб для бенчмарков (опционально)
+  benchmark:
+    name: Бенчмарки
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout код
+      uses: actions/checkout@v4
+      
+    - name: Установка Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+        
+    - name: Установка зависимостей
+      run: go mod tidy
+      
+    - name: Запуск бенчмарков
+      run: |
+        go test -bench=. -benchmem ./... > benchmark.txt
+        cat benchmark.txt
+        echo "OK: Бенчмарки выполнены"
+        
+    - name: Публикация результатов бенчмарков
+      uses: actions/upload-artifact@v3
+      with:
+        name: benchmark-results
+        path: benchmark.txt
+
+  # Джоб для проверки безопасности
+  security:
+    name: Проверка безопасности
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - name: Checkout код
+      uses: actions/checkout@v4
+      
+    - name: Установка Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+        
+    - name: Установка govulncheck
+      run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      
+    - name: Сканирование уязвимостей
+      run: |
+        govulncheck ./...
+        echo "OK: Уязвимости не найдены"
+
+  # Уведомления о результатах
+  notify:
+    name: Уведомления
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    if: always()
+    
+    steps:
+    - name: Результат CI/CD
+      run: |
+        if [ "${{ needs.test.result }}" == "success" ] && [ "${{ needs.build.result }}" == "success" ]; then
+          echo "SUCCESS: CI/CD пайплайн успешно завершён!"
+          echo "OK: Тесты - ${{ needs.test.result }}"
+          echo "OK: Сборка - ${{ needs.build.result }}"
+        else
+          echo "ERROR: CI/CD пайплайн завершился с ошибками"
+          echo "FAIL: Тесты - ${{ needs.test.result }}"
+          echo "FAIL: Сборка - ${{ needs.build.result }}"
+          exit 1
+        fi 

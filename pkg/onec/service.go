@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 )
 
 // OneCService сервис для работы с 1С
@@ -194,30 +195,97 @@ func (s *OneCService) GetStatus() map[string]interface{} {
 	return status
 }
 
-// loadConfig загружает конфигурацию из файла
+// loadConfig загружает конфигурацию из файла и переменных окружения
 func loadConfig(configPath string) (*IntegrationConfig, error) {
-	// Проверяем существует ли файл конфигурации
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		// Если конфигурации нет, возвращаем конфигурацию по умолчанию
-		log.Printf("WARNING: Файл конфигурации %s не найден, используем настройки по умолчанию", configPath)
-		return &IntegrationConfig{
-			Enabled:  false,
-			AutoSend: false,
-			Mapping:  make(map[string]DocumentTypeConfig),
-		}, nil
-	}
-
-	// Читаем файл
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("не удалось прочитать файл конфигурации: %w", err)
-	}
-
-	// Парсим JSON
 	var config IntegrationConfig
-	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("ошибка парсинга конфигурации: %w", err)
+
+	// Сначала пытаемся загрузить из файла
+	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
+		data, err := os.ReadFile(configPath)
+		if err != nil {
+			log.Printf("WARNING: Не удалось прочитать файл конфигурации %s: %v", configPath, err)
+		} else {
+			if err := json.Unmarshal(data, &config); err != nil {
+				log.Printf("WARNING: Ошибка парсинга конфигурации %s: %v", configPath, err)
+			} else {
+				log.Printf("INFO: Конфигурация загружена из файла: %s", configPath)
+			}
+		}
+	} else {
+		log.Printf("INFO: Файл конфигурации %s не найден", configPath)
 	}
+
+	// Переопределяем настройки из переменных окружения (приоритет)
+	overrideFromEnv(&config)
+
+	// Если базовые настройки не установлены, используем значения по умолчанию
+	setDefaults(&config)
 
 	return &config, nil
+}
+
+// overrideFromEnv переопределяет настройки из переменных окружения
+func overrideFromEnv(config *IntegrationConfig) {
+	// Основные настройки 1С
+	if baseURL := os.Getenv("ONEC_BASE_URL"); baseURL != "" {
+		config.BaseURL = baseURL
+		log.Printf("INFO: ONEC_BASE_URL установлен из ENV: %s", baseURL)
+	}
+
+	if username := os.Getenv("ONEC_USERNAME"); username != "" {
+		config.Username = username
+		log.Printf("INFO: ONEC_USERNAME установлен из ENV: %s", username)
+	}
+
+	if password := os.Getenv("ONEC_PASSWORD"); password != "" {
+		config.Password = password
+		log.Printf("INFO: ONEC_PASSWORD установлен из ENV: [скрыт]")
+	}
+
+	if timeoutStr := os.Getenv("ONEC_TIMEOUT"); timeoutStr != "" {
+		if timeout, err := strconv.Atoi(timeoutStr); err == nil {
+			config.Timeout = timeout
+			log.Printf("INFO: ONEC_TIMEOUT установлен из ENV: %d", timeout)
+		} else {
+			log.Printf("WARNING: Неверный формат ONEC_TIMEOUT: %s", timeoutStr)
+		}
+	}
+
+	// Флаги включения/отключения
+	if enabledStr := os.Getenv("ONEC_ENABLED"); enabledStr != "" {
+		if enabled, err := strconv.ParseBool(enabledStr); err == nil {
+			config.Enabled = enabled
+			log.Printf("INFO: ONEC_ENABLED установлен из ENV: %t", enabled)
+		} else {
+			log.Printf("WARNING: Неверный формат ONEC_ENABLED: %s", enabledStr)
+		}
+	}
+
+	if autoSendStr := os.Getenv("ONEC_AUTO_SEND"); autoSendStr != "" {
+		if autoSend, err := strconv.ParseBool(autoSendStr); err == nil {
+			config.AutoSend = autoSend
+			log.Printf("INFO: ONEC_AUTO_SEND установлен из ENV: %t", autoSend)
+		} else {
+			log.Printf("WARNING: Неверный формат ONEC_AUTO_SEND: %s", autoSendStr)
+		}
+	}
+}
+
+// setDefaults устанавливает значения по умолчанию для не заданных параметров
+func setDefaults(config *IntegrationConfig) {
+	if config.Timeout == 0 {
+		config.Timeout = 30
+	}
+
+	if config.Mapping == nil {
+		config.Mapping = make(map[string]DocumentTypeConfig)
+	}
+
+	// Если базовые настройки для подключения не заданы, отключаем интеграцию
+	if config.BaseURL == "" || config.Username == "" || config.Password == "" {
+		if config.Enabled {
+			log.Printf("WARNING: Не заданы базовые настройки подключения к 1С, отключаем интеграцию")
+			config.Enabled = false
+		}
+	}
 }

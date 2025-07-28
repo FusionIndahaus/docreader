@@ -70,3 +70,14 @@ docker-data/
 # Local development файлы
 local/
 dev/ 
+
+# Test artifacts
+coverage.out
+coverage.html
+*.test
+
+# Build artifacts
+document-ai
+builds/
+bin/
+dist/ 

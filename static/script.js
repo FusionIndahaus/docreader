@@ -3,19 +3,15 @@
 
 class DocumentAIApp {
     constructor() {
-        // Основные элементы интерфейса
+        // DOM элементы
         this.form = document.getElementById('uploadForm');
+        this.messageTextarea = document.getElementById('message');
         this.fileInput = document.getElementById('file');
-        this.fileUploadArea = document.getElementById('fileUploadArea');
-        this.filePreview = document.getElementById('filePreview');
-        this.fileName = document.getElementById('fileName');
-        this.fileSize = document.getElementById('fileSize');
-        this.fileRemove = document.getElementById('fileRemove');
+        this.fileNameSpan = document.getElementById('file-name');
         this.submitBtn = document.getElementById('submitBtn');
         this.statusMessage = document.getElementById('statusMessage');
         this.refreshBtn = document.getElementById('refreshBtn');
-        this.clearBtn = document.getElementById('clearBtn');
-        this.resultsContainer = document.getElementById('resultsContainer');
+        this.responseList = document.getElementById('responseList');
         
         // Состояние приложения
         this.isUploading = false;
@@ -36,27 +32,32 @@ class DocumentAIApp {
     
     // Настройка всех обработчиков событий
     setupEventListeners() {
-        // Форма загрузки
+        console.log('INFO: Настройка обработчиков событий...');
+        
+        // Отправка формы
         this.form.addEventListener('submit', (e) => this.handleFormSubmit(e));
         
         // Загрузка файлов
         this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
-        this.fileRemove.addEventListener('click', () => this.clearSelectedFile());
         
         // Drag & Drop для файлов
         this.setupDragAndDrop();
         
         // Кнопки управления
         this.refreshBtn.addEventListener('click', () => this.loadExistingResults());
-        this.clearBtn.addEventListener('click', () => this.clearResults());
         
-        // Автообновление результатов каждые 30 секунд
-        setInterval(() => this.loadExistingResults(), 30000);
+        console.log('INFO: Обработчики событий настроены');
     }
     
     // Настройка drag & drop для файлов
     setupDragAndDrop() {
-        const dropZone = this.fileUploadArea;
+        // Используем form как зону для drag&drop
+        const dropZone = this.form;
+        
+        if (!dropZone) {
+            console.log('INFO: Drag&drop отключен - элемент не найден');
+            return;
+        }
         
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             dropZone.addEventListener(eventName, this.preventDefaults, false);
@@ -75,6 +76,8 @@ class DocumentAIApp {
         });
         
         dropZone.addEventListener('drop', (e) => this.handleFileDrop(e));
+        
+        console.log('INFO: Drag&drop настроен');
     }
     
     preventDefaults(e) {
@@ -200,26 +203,18 @@ class DocumentAIApp {
     
     // Обновление превью файла
     updateFilePreview(file) {
-        this.fileName.textContent = file.name;
-        this.fileSize.textContent = this.formatFileSize(file.size);
-        
-        // Показываем превью, скрываем placeholder
-        this.filePreview.style.display = 'flex';
-        this.fileUploadArea.querySelector('.file-upload-content').style.display = 'none';
-        
         // Добавляем иконку в зависимости от типа файла
         const icon = this.getFileIcon(file.name);
-        this.fileName.textContent = `${icon} ${file.name}`;
+        this.fileNameSpan.textContent = `${icon} ${file.name}`;
+        
+        console.log(`INFO: Файл выбран: ${file.name} (${this.formatFileSize(file.size)})`);
     }
     
     // Очистка выбранного файла
     clearSelectedFile() {
         this.selectedFile = null;
         this.fileInput.value = '';
-        
-        // Скрываем превью, показываем placeholder
-        this.filePreview.style.display = 'none';
-        this.fileUploadArea.querySelector('.file-upload-content').style.display = 'block';
+        this.fileNameSpan.textContent = 'Файл не выбран';
         
         console.log('INFO: Файл удален');
     }
@@ -228,17 +223,14 @@ class DocumentAIApp {
     async loadExistingResults() {
         try {
             console.log('INFO: Загружаем результаты...');
-            
             const response = await fetch('/results');
-            const data = await response.json();
             
-            if (response.ok && data.data) {
-                this.results = data.data;
+            if (response.ok) {
+                const data = await response.json();
+                this.results = data.data || [];
                 this.renderResults(this.results);
                 
-                if (this.results.length > 0) {
-                    this.clearBtn.style.display = 'inline-block';
-                }
+                console.log(`INFO: Загружено результатов: ${this.results.length}`);
             }
             
         } catch (error) {
@@ -249,12 +241,8 @@ class DocumentAIApp {
     // Отрисовка результатов
     renderResults(results) {
         if (!results || results.length === 0) {
-            this.resultsContainer.innerHTML = `
-                <div class="no-results">
-                    <div class="no-results-icon">🤖</div>
-                    <h3>Пока результатов нет</h3>
-                    <p>Загрузите документ выше, и здесь появятся результаты анализа</p>
-                </div>
+            this.responseList.innerHTML = `
+                <p class="no-data">Ожидание данных...</p>
             `;
             return;
         }
@@ -264,8 +252,8 @@ class DocumentAIApp {
             new Date(b.timestamp) - new Date(a.timestamp)
         );
         
-        this.resultsContainer.innerHTML = sortedResults.map(result => `
-            <div class="result-item" data-id="${result.id}">
+        this.responseList.innerHTML = sortedResults.map(result => `
+            <div class="response-item" data-id="${result.id}">
                 <div class="result-header">
                     <div class="result-time">${this.formatTime(result.timestamp)}</div>
                     <div class="result-status status-${result.status || 'completed'}">${this.getStatusText(result.status)}</div>
@@ -273,23 +261,10 @@ class DocumentAIApp {
                 <div class="result-content">
                     <div class="result-text">${this.formatResultText(result.text)}</div>
                 </div>
-                <div class="result-actions">
-                    <button class="copy-btn" onclick="app.copyToClipboard('${result.id}')">Копировать</button>
-                </div>
             </div>
         `).join('');
         
         console.log(`INFO: Отображено результатов: ${sortedResults.length}`);
-    }
-    
-    // Очистка всех результатов (только UI)
-    clearResults() {
-        if (confirm('Очистить все результаты? Это действие нельзя отменить.')) {
-            this.results = [];
-            this.renderResults([]);
-            this.clearBtn.style.display = 'none';
-            console.log('INFO: Результаты очищены');
-        }
     }
     
     // Копирование результата в буфер обмена
@@ -314,16 +289,11 @@ class DocumentAIApp {
     
     // Установка состояния загрузки
     setLoadingState(isLoading) {
-        const btnText = this.submitBtn.querySelector('.btn-text');
-        const btnLoader = this.submitBtn.querySelector('.btn-loader');
-        
         if (isLoading) {
-            btnText.style.display = 'none';
-            btnLoader.style.display = 'inline';
+            this.submitBtn.textContent = 'Отправляем...';
             this.submitBtn.disabled = true;
         } else {
-            btnText.style.display = 'inline';
-            btnLoader.style.display = 'none';
+            this.submitBtn.textContent = 'Начать обработку';
             this.submitBtn.disabled = false;
         }
     }

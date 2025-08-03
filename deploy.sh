@@ -40,6 +40,10 @@ ssh $SERVER_USER@$SERVER_HOST << EOF
     sudo chown -R $SERVER_USER:$SERVER_USER $APP_DIR
     sudo chmod +x $APP_DIR/$APP_NAME
     
+    # Перезапускаем сервис
+    sudo systemctl start $APP_NAME
+    sudo systemctl status $APP_NAME --no-pager
+    
     # Очищаем временные файлы
     rm -f /tmp/$APP_NAME.tar.gz
 EOF

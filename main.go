@@ -103,7 +103,7 @@ func initEnvVariables() {
 
 	maxResponsesStr := os.Getenv("MAX_RESPONSES")
 	if maxResponsesStr == "" {
-		maxResponses = 20 
+		maxResponses = 20
 		log.Printf("INFO: MAX_RESPONSES не установлен, используется дефолт: %d", maxResponses)
 	} else {
 		maxResponses, err = strconv.Atoi(maxResponsesStr)

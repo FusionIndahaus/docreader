@@ -63,7 +63,7 @@ jobs:
         echo "OK: Все тесты пройдены"
         
     - name: Публикация отчёта о покрытии
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: coverage-report
         path: coverage.html
@@ -147,7 +147,7 @@ jobs:
         fi
         
     - name: Публикация артефактов
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: document-ai-binary
         path: document-ai
@@ -178,7 +178,7 @@ jobs:
         echo "OK: Бенчмарки выполнены"
         
     - name: Публикация результатов бенчмарков
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: benchmark-results
         path: benchmark.txt

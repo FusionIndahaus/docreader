@@ -151,6 +151,18 @@ check: fmt vet test-race security
 ## dev: Режим разработки (форматирование + тесты + запуск)
 dev: fmt test run
 
+## deploy: Деплой на сервер
+deploy:
+	@echo "$(GREEN)Деплой на сервер...$(NC)"
+	./deploy.sh
+	@echo "$(GREEN)OK: Деплой завершен$(NC)"
+
+## restart-server: Перезапуск приложения на сервере
+restart-server:
+	@echo "$(GREEN)Перезапуск приложения на сервере...$(NC)"
+	ssh root@45.82.153.200 "systemctl restart n8nuploader && systemctl status n8nuploader --no-pager"
+	@echo "$(GREEN)OK: Приложение перезапущено$(NC)"
+
 ## ci: CI/CD проверки (как в GitHub Actions)
 ci: fmt vet test-race test-coverage security
 	@echo "$(GREEN)OK: CI/CD проверки завершены$(NC)" 

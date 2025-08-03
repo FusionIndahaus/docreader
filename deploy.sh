@@ -3,8 +3,8 @@
 # Скрипт для деплоя Go приложения на сервер
 
 # Переменные (настройте под ваш сервер)
-SERVER_USER="your_username"
-SERVER_HOST="your_server_ip"
+SERVER_USER="root"
+SERVER_HOST="45.82.153.200"
 APP_NAME="n8nuploader"
 APP_DIR="/opt/$APP_NAME"
 

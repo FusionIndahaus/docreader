@@ -592,6 +592,13 @@ footer:before {
     }
 }
 
+/* Drag and Drop Styles */
+.drag-over {
+    background-color: rgba(63, 81, 181, 0.1);
+    border: 2px dashed var(--primary-color);
+    transform: scale(1.02);
+}
+
 @media (max-width: 767px) {
     .container {
         padding: 20px 15px;

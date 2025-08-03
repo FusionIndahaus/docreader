@@ -16,7 +16,7 @@ GOOS=linux GOARCH=amd64 go build -o $APP_NAME main.go
 
 # 2. Создаем архив с приложением
 echo "📁 Создание архива..."
-tar -czf $APP_NAME.tar.gz $APP_NAME static/ README.md
+tar -czf $APP_NAME.tar.gz $APP_NAME static/ README.md .env
 
 # 3. Копируем на сервер
 echo "⬆️ Загрузка на сервер..."
@@ -36,7 +36,7 @@ ssh $SERVER_USER@$SERVER_HOST << EOF
     tar -xzf $APP_NAME.tar.gz
     
     # Копируем файлы
-    sudo cp -r $APP_NAME static/ README.md $APP_DIR/
+    sudo cp -r $APP_NAME static/ README.md .env $APP_DIR/
     sudo chown -R $SERVER_USER:$SERVER_USER $APP_DIR
     sudo chmod +x $APP_DIR/$APP_NAME
     

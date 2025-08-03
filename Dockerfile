@@ -5,13 +5,14 @@ FROM golang:1.21-alpine AS builder
 WORKDIR /app
 
 # Копируем go.mod и go.sum (если есть)
-COPY go.mod ./
+COPY go.mod go.sum ./
 
 # Загружаем зависимости
 RUN go mod download
 
 # Копируем исходный код
 COPY main.go ./
+COPY pkg/ ./pkg/
 
 # Собираем приложение
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .

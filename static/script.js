@@ -254,10 +254,6 @@ class DocumentAIApp {
         
         this.responseList.innerHTML = sortedResults.map(result => `
             <div class="response-item" data-id="${result.id}">
-                <div class="result-header">
-                    <div class="result-time">${this.formatTime(result.timestamp)}</div>
-                    <div class="result-status status-${result.status || 'completed'}">${this.getStatusText(result.status)}</div>
-                </div>
                 <div class="result-content">
                     <div class="result-text">${this.formatResultText(result.text)}</div>
                 </div>
@@ -343,33 +339,6 @@ class DocumentAIApp {
             'png': '[IMG]'
         };
         return icons[ext] || '[FILE]';
-    }
-    
-    formatTime(timestamp) {
-        const date = new Date(timestamp);
-        const now = new Date();
-        const diffMinutes = Math.floor((now - date) / (1000 * 60));
-        
-        if (diffMinutes < 1) return 'только что';
-        if (diffMinutes < 60) return `${diffMinutes} мин назад`;
-        if (diffMinutes < 1440) return `${Math.floor(diffMinutes / 60)} ч назад`;
-        
-        return date.toLocaleDateString('ru-RU', {
-            day: 'numeric',
-            month: 'short',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-    }
-    
-    getStatusText(status) {
-        const statusTexts = {
-            'completed': 'Готово',
-            'processing': 'Обработка',
-            'error': 'Ошибка',
-            'pending': 'Ожидание'
-        };
-        return statusTexts[status] || 'Готово';
     }
     
     formatResultText(text) {

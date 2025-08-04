@@ -151,11 +151,12 @@ func setupRoutes() {
 	http.Handle("/static/", http.StripPrefix("/static/", fs))
 
 	// Основные эндпоинты
-	http.HandleFunc("/", handleHome)              // главная страница
-	http.HandleFunc("/upload", handleFileUpload)  // загрузка файлов
-	http.HandleFunc("/webhook", handleN8nWebhook) // прием данных от n8n
-	http.HandleFunc("/results", handleGetResults) // получение результатов обработки
-	http.HandleFunc("/health", handleHealthCheck) // проверка здоровья сервиса
+	http.HandleFunc("/", handleHome)                   // главная страница
+	http.HandleFunc("/upload", handleFileUpload)       // загрузка файлов
+	http.HandleFunc("/webhook", handleN8nWebhook)      // прием данных от n8n
+	http.HandleFunc("/webhook-test", handleN8nWebhook) // тестовый webhook (тот же обработчик)
+	http.HandleFunc("/results", handleGetResults)      // получение результатов обработки
+	http.HandleFunc("/health", handleHealthCheck)      // проверка здоровья сервиса
 
 	// Новые эндпоинты для 1С
 	http.HandleFunc("/onec/status", handleOneCStatus)   // статус интеграции с 1С
@@ -237,6 +238,22 @@ func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 
 // Принимаем результаты обработки от n8n
 func handleN8nWebhook(w http.ResponseWriter, r *http.Request) {
+	// Логируем все детали запроса
+	log.Printf("INFO: === WEBHOOK ЗАПРОС ===")
+	log.Printf("INFO: Метод: %s", r.Method)
+	log.Printf("INFO: URL: %s", r.URL.String())
+	log.Printf("INFO: Remote Address: %s", r.RemoteAddr)
+	log.Printf("INFO: User-Agent: %s", r.Header.Get("User-Agent"))
+	log.Printf("INFO: Content-Type: %s", r.Header.Get("Content-Type"))
+
+	// Логируем все заголовки
+	log.Printf("INFO: Заголовки запроса:")
+	for name, values := range r.Header {
+		for _, value := range values {
+			log.Printf("INFO:   %s: %s", name, value)
+		}
+	}
+
 	if r.Method != http.MethodPost {
 		sendJSONError(w, "Только POST", http.StatusMethodNotAllowed)
 		return
@@ -251,6 +268,8 @@ func handleN8nWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
+	log.Printf("INFO: Получены данные от n8n (длина: %d байт): %s", len(body), string(body))
+
 	// Пытаемся распарсить JSON
 	var webhookData map[string]interface{}
 	var responseText string
@@ -258,9 +277,62 @@ func handleN8nWebhook(w http.ResponseWriter, r *http.Request) {
 
 	// Если пришел JSON - парсим его
 	if err := json.Unmarshal(body, &webhookData); err == nil {
+		// Ищем стандартные текстовые поля
 		if text, ok := webhookData["text"].(string); ok && text != "" {
 			responseText = text
+		} else if message, ok := webhookData["message"].(string); ok && message != "" {
+			responseText = message
+		} else {
+			// Универсальная обработка всех полей JSON
+			var parts []string
+
+			// Обрабатываем все поля, кроме служебных
+			excludeFields := map[string]bool{
+				"status":        true,
+				"webhookUrl":    true,
+				"executionMode": true,
+				"timestamp":     true,
+				"id":            true,
+			}
+
+			for key, value := range webhookData {
+				if excludeFields[key] {
+					continue
+				}
+
+				// Обрабатываем разные типы значений
+				switch v := value.(type) {
+				case string:
+					if v != "" {
+						parts = append(parts, fmt.Sprintf("%s: %s", key, v))
+					}
+				case float64:
+					parts = append(parts, fmt.Sprintf("%s: %.2f", key, v))
+				case int:
+					parts = append(parts, fmt.Sprintf("%s: %d", key, v))
+				case bool:
+					parts = append(parts, fmt.Sprintf("%s: %t", key, v))
+				case map[string]interface{}:
+					// Если это объект, преобразуем в JSON
+					if jsonBytes, err := json.Marshal(v); err == nil {
+						parts = append(parts, fmt.Sprintf("%s: %s", key, string(jsonBytes)))
+					}
+				case []interface{}:
+					// Если это массив, преобразуем в JSON
+					if jsonBytes, err := json.Marshal(v); err == nil {
+						parts = append(parts, fmt.Sprintf("%s: %s", key, string(jsonBytes)))
+					}
+				default:
+					// Для других типов просто преобразуем в строку
+					parts = append(parts, fmt.Sprintf("%s: %v", key, v))
+				}
+			}
+
+			if len(parts) > 0 {
+				responseText = strings.Join(parts, "\n")
+			}
 		}
+
 		if statusValue, ok := webhookData["status"].(string); ok && statusValue != "" {
 			status = statusValue
 		}
@@ -272,8 +344,8 @@ func handleN8nWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if responseText == "" {
-		sendJSONError(w, "Пустой ответ от n8n", http.StatusBadRequest)
-		return
+		responseText = "Данные обработаны, но текст результата пуст"
+		log.Printf("WARNING: Пустой текст результата, но данные получены: %v", webhookData)
 	}
 
 	// Создаем результат обработки
@@ -373,6 +445,14 @@ func handleGetResults(w http.ResponseWriter, r *http.Request) {
 	copy(data, responses)
 	responsesMutex.RUnlock()
 
+	log.Printf("INFO: Отдаем %d результатов обработки", len(data))
+	if len(data) > 0 {
+		log.Printf("DEBUG: Последний результат: ID=%s, Text=%s, Status=%s",
+			data[len(data)-1].ID,
+			truncateString(data[len(data)-1].Text, 100),
+			data[len(data)-1].Status)
+	}
+
 	sendJSONResponse(w, APIResponse{
 		Status: "success",
 		Data:   data,
@@ -405,12 +485,25 @@ func handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 
 // Отправляем файл и сообщение в n8n
 func sendToN8n(message string, file multipart.File, fileName string) error {
+	// Создаем буфер для multipart данных
 	var buffer bytes.Buffer
 	writer := multipart.NewWriter(&buffer)
 
-	// Добавляем текстовое поле
+	// Добавляем текстовые поля
 	if err := writer.WriteField("message", message); err != nil {
 		return fmt.Errorf("не удалось добавить сообщение: %w", err)
+	}
+
+	if err := writer.WriteField("fileName", fileName); err != nil {
+		return fmt.Errorf("не удалось добавить имя файла: %w", err)
+	}
+
+	if err := writer.WriteField("webhookUrl", n8nWebhookURL); err != nil {
+		return fmt.Errorf("не удалось добавить webhook URL: %w", err)
+	}
+
+	if err := writer.WriteField("executionMode", "production"); err != nil {
+		return fmt.Errorf("не удалось добавить режим выполнения: %w", err)
 	}
 
 	// Перематываем файл в начало на всякий случай
@@ -441,7 +534,7 @@ func sendToN8n(message string, file multipart.File, fileName string) error {
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	// Отправляем запрос
-	client := &http.Client{Timeout: 30 * time.Second} // таймаут на всякий случай
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("ошибка отправки в n8n: %w", err)

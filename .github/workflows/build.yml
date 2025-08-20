@@ -1,0 +1,25 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout код
+        uses: actions/checkout@v4
+
+      - name: Установка Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Сборка приложения
+        run: |
+          go build -ldflags="-s -w" -o document-ai .
+          echo "OK: Сборка успешна"
+

@@ -192,7 +192,6 @@ main {
     background: linear-gradient(to right, var(--primary-color), var(--secondary-color));
 }
 
-/* Features List */
 .feature-list {
     padding-bottom: 20px;
 }
@@ -452,7 +451,6 @@ button:focus:not(:active)::after {
     content: '❌';
 }
 
-/* Стили для секции с результатами обработки */
 .response-section {
     animation: fadeIn 0.8s ease-out;
 }
@@ -551,7 +549,6 @@ footer:before {
     border-radius: 2px;
 }
 
-/* Loader animation */
 .loader {
     display: inline-block;
     position: relative;
@@ -581,7 +578,6 @@ footer:before {
     }
 }
 
-/* Media Queries */
 @media (min-width: 768px) {
     main {
         grid-template-columns: 1fr 1fr;
@@ -592,7 +588,6 @@ footer:before {
     }
 }
 
-/* Drag and Drop Styles */
 .drag-over {
     background-color: rgba(63, 81, 181, 0.1);
     border: 2px dashed var(--primary-color);

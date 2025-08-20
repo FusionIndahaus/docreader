@@ -133,7 +133,7 @@ jobs:
       
     - name: Сборка приложения
       run: |
-        go build -ldflags="-s -w" -o document-ai main.go
+        go build -ldflags="-s -w" -o document-ai .
         echo "OK: Сборка успешна"
         
     - name: Проверка Docker

@@ -21,7 +21,7 @@ git clone https://github.com/FusionIndahaus/docreader.git
 cd document-ai
 
 # Запускаем приложение
-go run main.go
+go run .
 
 # Открываем браузер
 open http://localhost:8080
@@ -87,7 +87,7 @@ Webhook для получения результатов от n8n
 
 ```bash
 # Собираем для Linux
-GOOS=linux GOARCH=amd64 go build -o document-ai main.go
+GOOS=linux GOARCH=amd64 go build -o document-ai .
 
 # Загружаем на сервер
 scp document-ai static/ user@server:/opt/document-ai/

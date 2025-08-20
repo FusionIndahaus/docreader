@@ -10,12 +10,11 @@ COPY go.mod go.sum ./
 # Загружаем зависимости
 RUN go mod download
 
-# Копируем исходный код
-COPY main.go ./
-COPY pkg/ ./pkg/
+# Копируем исходный код целиком
+COPY . ./
 
 # Собираем приложение
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -a -installsuffix cgo -o main .
 
 # Используем минимальный образ для production
 FROM alpine:latest

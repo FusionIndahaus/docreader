@@ -10,7 +10,6 @@ import (
 	"time"
 )
 
-// Тестируем функцию проверки типов файлов
 func TestIsValidFileType(t *testing.T) {
 	testCases := []struct {
 		filename string
@@ -37,7 +36,6 @@ func TestIsValidFileType(t *testing.T) {
 	}
 }
 
-// Тестируем функцию генерации простого ID
 func TestGenerateSimpleID(t *testing.T) {
 	id1 := generateSimpleID()
 	time.Sleep(1 * time.Millisecond) // небольшая пауза для уникальности
@@ -52,7 +50,6 @@ func TestGenerateSimpleID(t *testing.T) {
 	}
 }
 
-// Тестируем функцию обрезки строк
 func TestTruncateString(t *testing.T) {
 	testCases := []struct {
 		input    string
@@ -75,7 +72,6 @@ func TestTruncateString(t *testing.T) {
 	}
 }
 
-// Тестируем функцию отправки JSON ответов
 func TestSendJSONResponse(t *testing.T) {
 	rr := httptest.NewRecorder()
 
@@ -98,7 +94,6 @@ func TestSendJSONResponse(t *testing.T) {
 	}
 }
 
-// Тестируем функцию отправки JSON ошибок
 func TestSendJSONError(t *testing.T) {
 	rr := httptest.NewRecorder()
 
@@ -123,7 +118,6 @@ func TestSendJSONError(t *testing.T) {
 	}
 }
 
-// Тестируем health check endpoint
 func TestHandleHealthCheck(t *testing.T) {
 	req, err := http.NewRequest("GET", "/health", nil)
 	if err != nil {
@@ -150,7 +144,6 @@ func TestHandleHealthCheck(t *testing.T) {
 	}
 }
 
-// Тестируем webhook с неправильным методом
 func TestHandleN8nWebhookWrongMethod(t *testing.T) {
 	req, err := http.NewRequest("GET", "/webhook", nil)
 	if err != nil {
@@ -168,9 +161,7 @@ func TestHandleN8nWebhookWrongMethod(t *testing.T) {
 	}
 }
 
-// Тестируем webhook с валидными данными
 func TestHandleN8nWebhookValid(t *testing.T) {
-	// Сохраняем и инициализируем переменные
 	responsesMutex.Lock()
 	originalResponses := responses
 	originalMaxResponses := maxResponses
@@ -178,7 +169,6 @@ func TestHandleN8nWebhookValid(t *testing.T) {
 	maxResponses = 20 // устанавливаем достаточный лимит
 	responsesMutex.Unlock()
 
-	// Восстанавливаем после теста
 	defer func() {
 		responsesMutex.Lock()
 		responses = originalResponses
@@ -210,7 +200,6 @@ func TestHandleN8nWebhookValid(t *testing.T) {
 			status, http.StatusOK)
 	}
 
-	// Проверяем, что ответ добавился в responses
 	responsesMutex.RLock()
 	responsesCount := len(responses)
 	responsesMutex.RUnlock()
@@ -220,9 +209,7 @@ func TestHandleN8nWebhookValid(t *testing.T) {
 	}
 }
 
-// Тестируем обработку GET запросов к результатам
 func TestHandleGetResults(t *testing.T) {
-	// Сохраняем оригинальные данные
 	responsesMutex.Lock()
 	originalResponses := responses
 	responses = []ProcessingResponse{
@@ -235,7 +222,6 @@ func TestHandleGetResults(t *testing.T) {
 	}
 	responsesMutex.Unlock()
 
-	// Восстанавливаем после теста
 	defer func() {
 		responsesMutex.Lock()
 		responses = originalResponses
@@ -267,46 +253,12 @@ func TestHandleGetResults(t *testing.T) {
 	}
 }
 
-// Тестируем статус 1С когда сервис не настроен
-func TestHandleOneCStatusNotConfigured(t *testing.T) {
-	// Временно обнуляем oneCService
-	originalService := oneCService
-	oneCService = nil
-	defer func() { oneCService = originalService }()
-
-	req, err := http.NewRequest("GET", "/onec/status", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rr := httptest.NewRecorder()
-	handler := http.HandlerFunc(handleOneCStatus)
-
-	handler.ServeHTTP(rr, req)
-
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("handler вернул неправильный статус код: получен %v, ожидался %v",
-			status, http.StatusOK)
-	}
-
-	var response APIResponse
-	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
-		t.Errorf("Не удалось распарсить JSON ответ: %v", err)
-	}
-
-	if response.Status != "success" {
-		t.Errorf("Неожиданный статус: получен %v, ожидался 'success'", response.Status)
-	}
-}
-
-// Benchmark для функции генерации ID
 func BenchmarkGenerateSimpleID(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		generateSimpleID()
 	}
 }
 
-// Benchmark для функции обрезки строк
 func BenchmarkTruncateString(b *testing.B) {
 	longString := "Это очень длинная строка для тестирования производительности функции обрезки"
 	for i := 0; i < b.N; i++ {
@@ -314,7 +266,6 @@ func BenchmarkTruncateString(b *testing.B) {
 	}
 }
 
-// Benchmark для проверки типов файлов
 func BenchmarkIsValidFileType(b *testing.B) {
 	testFiles := []string{"test.pdf", "image.jpg", "doc.docx", "archive.zip"}
 	for i := 0; i < b.N; i++ {

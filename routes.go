@@ -17,6 +17,7 @@ func setupRoutes() {
 	http.HandleFunc("/webhook", handleN8nWebhook)
 	http.HandleFunc("/webhook-test", handleN8nWebhook)
 	http.HandleFunc("/results", handleGetResults)
+	http.HandleFunc("/events", handleEvents)
 	http.HandleFunc("/health", handleHealthCheck)
 	http.Handle("/swagger/", httpSwagger.WrapHandler)
 }

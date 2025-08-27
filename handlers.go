@@ -197,7 +197,84 @@ func handleN8nWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	responsesMutex.Unlock()
 
+	go func(resp ProcessingResponse) {
+		subscribersMux.RLock()
+		for ch := range subscribers {
+			select {
+			case ch <- resp:
+			default:
+			}
+		}
+		subscribersMux.RUnlock()
+	}(response)
+
 	sendJSONResponse(w, APIResponse{Status: "success", Message: "Результат сохранен"})
+}
+
+// handleEvents отправляет клиенту события результатов через SSE
+//
+//nolint:unused
+func handleEvents(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	ch := make(chan ProcessingResponse, 1)
+
+	// Регистрируем подписчика
+	subscribersMux.Lock()
+	if subscribers == nil {
+		subscribers = make(map[chan ProcessingResponse]struct{})
+	}
+	subscribers[ch] = struct{}{}
+	subscribersMux.Unlock()
+
+	// При закрытии соединения удаляем подписчика
+	notify := r.Context().Done()
+	go func() {
+		<-notify
+		subscribersMux.Lock()
+		delete(subscribers, ch)
+		close(ch)
+		subscribersMux.Unlock()
+	}()
+
+	// Отправим последние результаты сразу при подключении
+	responsesMutex.RLock()
+	snapshot := make([]ProcessingResponse, len(responses))
+	copy(snapshot, responses)
+	responsesMutex.RUnlock()
+	for _, resp := range snapshot {
+		fmt.Fprintf(w, "data: %s\n\n", toJSON(resp))
+	}
+	flusher.Flush()
+
+	// Основной цикл отправки событий
+	for {
+		select {
+		case resp, ok := <-ch:
+			if !ok {
+				return
+			}
+			fmt.Fprintf(w, "data: %s\n\n", toJSON(resp))
+			flusher.Flush()
+		case <-r.Context().Done():
+			return
+		}
+	}
+}
+
+//nolint:unused
+func toJSON(v interface{}) string {
+	b, _ := json.Marshal(v)
+	return string(b)
 }
 
 // handleGetResults godoc

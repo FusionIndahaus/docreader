@@ -20,6 +20,7 @@ class DocumentAIApp {
     init() {
         this.setupEventListeners();
         this.loadExistingResults();
+        this.connectLiveUpdates();
         this.animateOnLoad();
     }
     
@@ -35,6 +36,35 @@ class DocumentAIApp {
         
     }
     
+    connectLiveUpdates() {
+        try {
+            const evtSource = new EventSource('/events');
+            evtSource.onmessage = (event) => {
+                try {
+                    const payload = JSON.parse(event.data);
+                    if (payload && payload.id) {
+                        // добавляем или обновляем локальный список
+                        const existsIndex = this.results.findIndex(r => r.id === payload.id);
+                        if (existsIndex >= 0) {
+                            this.results[existsIndex] = payload;
+                        } else {
+                            this.results.push(payload);
+                        }
+                        this.renderResults(this.results);
+                    }
+                } catch (e) {
+                    console.error('ERROR: Невалидное SSE сообщение', e);
+                }
+            };
+            evtSource.onerror = () => {
+                // Автопереподключение: браузер сам переподключается для EventSource
+            };
+            this.evtSource = evtSource;
+        } catch (e) {
+            console.error('ERROR: Не удалось подключиться к событиям', e);
+        }
+    }
+
     setupDragAndDrop() {
         const dropZone = this.form;
         

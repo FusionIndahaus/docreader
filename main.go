@@ -6,20 +6,8 @@
 
 package main
 
-import (
-	"net/http"
-
-	httpSwagger "github.com/swaggo/http-swagger"
-
-	_ "document-ai/docs"
-)
-
 func main() {
 	initEnvVariables()
 	setupRoutes()
-
-	// Swagger endpoint
-	http.Handle("/swagger/", httpSwagger.WrapHandler)
-
 	startServer()
 }

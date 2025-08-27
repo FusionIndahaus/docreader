@@ -92,7 +92,7 @@ security:
 	@echo "$(YELLOW)🔗 Подробности: https://pkg.go.dev/vuln/$(NC)"
 #	@if command -v govulncheck >/dev/null 2>&1; then \
 #		echo "$(YELLOW)Запускаем govulncheck для информации...$(NC)"; \
-#		govulncheck ./... || echo "$(YELLOW)Найдены уязвимdости в стандартной библиотеке Go$(NC)"; \
+#		govulncheck ./... || echo "$(YELLOW)Найдены уязвимости в стандартной библиотеке Go$(NC)"; \
 #	else \
 #		echo "$(YELLOW)govulncheck не установлен$(NC)"; \
 #	fi

@@ -1,6 +1,12 @@
 package main
 
-import "net/http"
+import (
+	"net/http"
+
+	httpSwagger "github.com/swaggo/http-swagger"
+
+	_ "document-ai/docs"
+)
 
 func setupRoutes() {
 	fs := http.FileServer(http.Dir(staticDir))
@@ -12,4 +18,5 @@ func setupRoutes() {
 	http.HandleFunc("/webhook-test", handleN8nWebhook)
 	http.HandleFunc("/results", handleGetResults)
 	http.HandleFunc("/health", handleHealthCheck)
+	http.Handle("/swagger/", httpSwagger.WrapHandler)
 }

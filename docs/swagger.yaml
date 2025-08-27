@@ -1,0 +1,131 @@
+basePath: /
+definitions:
+  main.APIResponse:
+    properties:
+      data: {}
+      message:
+        type: string
+      status:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: API для загрузки и обработки документов через n8n
+  title: Document AI API
+  version: "1.0"
+paths:
+  /:
+    get:
+      description: Отдает HTML-страницу с формой загрузки документов
+      produces:
+      - text/html
+      responses:
+        "200":
+          description: index.html
+          schema:
+            type: string
+        "404":
+          description: Страница не найдена
+          schema:
+            $ref: '#/definitions/main.APIResponse'
+      summary: Главная страница
+      tags:
+      - Home
+  /health:
+    get:
+      description: Возвращает статус работы сервиса, время и версию
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Сервис работает нормально
+          schema:
+            $ref: '#/definitions/main.APIResponse'
+      summary: Проверка состояния сервиса
+      tags:
+      - Health
+  /results:
+    get:
+      description: Возвращает последние результаты обработки документов
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.APIResponse'
+      summary: Получить список результатов
+      tags:
+      - results
+  /upload:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Загружает файл (PDF, JPG, JPEG, PNG) с описанием и отправляет на
+        обработку через n8n
+      parameters:
+      - description: Описание документа
+        in: formData
+        name: message
+        required: true
+        type: string
+      - description: Файл документа
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Документ успешно отправлен на обработку
+          schema:
+            $ref: '#/definitions/main.APIResponse'
+        "400":
+          description: Ошибки валидации или проблемы с файлом
+          schema:
+            $ref: '#/definitions/main.APIResponse'
+        "405":
+          description: Метод не разрешен
+          schema:
+            $ref: '#/definitions/main.APIResponse'
+        "500":
+          description: Ошибка сервера при отправке в n8n
+          schema:
+            $ref: '#/definitions/main.APIResponse'
+      summary: Загрузка документа
+      tags:
+      - Documents
+  /webhook:
+    post:
+      consumes:
+      - application/json
+      description: Принимает данные обработки документа от n8n и сохраняет результат
+      parameters:
+      - description: Данные от n8n
+        in: body
+        name: payload
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Результат успешно сохранен
+          schema:
+            $ref: '#/definitions/main.APIResponse'
+        "400":
+          description: Ошибка чтения данных или JSON
+          schema:
+            $ref: '#/definitions/main.APIResponse'
+        "405":
+          description: Метод не разрешен
+          schema:
+            $ref: '#/definitions/main.APIResponse'
+      summary: Вебхук от n8n
+      tags:
+      - Webhook
+swagger: "2.0"

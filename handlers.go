@@ -19,6 +19,14 @@ func startServer() {
 	}
 }
 
+// handleHome godoc
+// @Summary Главная страница
+// @Description Отдает HTML-страницу с формой загрузки документов
+// @Tags Home
+// @Produce html
+// @Success 200 {string} string "index.html"
+// @Failure 404 {object} APIResponse "Страница не найдена"
+// @Router / [get]
 func handleHome(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
@@ -28,6 +36,19 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, staticDir+"/index.html")
 }
 
+// handleFileUpload godoc
+// @Summary Загрузка документа
+// @Description Загружает файл (PDF, JPG, JPEG, PNG) с описанием и отправляет на обработку через n8n
+// @Tags Documents
+// @Accept multipart/form-data
+// @Produce json
+// @Param message formData string true "Описание документа"
+// @Param file formData file true "Файл документа"
+// @Success 200 {object} APIResponse "Документ успешно отправлен на обработку"
+// @Failure 400 {object} APIResponse "Ошибки валидации или проблемы с файлом"
+// @Failure 405 {object} APIResponse "Метод не разрешен"
+// @Failure 500 {object} APIResponse "Ошибка сервера при отправке в n8n"
+// @Router /upload [post]
 func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		sendJSONError(w, "Только POST запросы", http.StatusMethodNotAllowed)
@@ -69,6 +90,17 @@ func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleN8nWebhook godoc
+// @Summary Вебхук от n8n
+// @Description Принимает данные обработки документа от n8n и сохраняет результат
+// @Tags Webhook
+// @Accept json
+// @Produce json
+// @Param payload body map[string]interface{} true "Данные от n8n"
+// @Success 200 {object} APIResponse "Результат успешно сохранен"
+// @Failure 400 {object} APIResponse "Ошибка чтения данных или JSON"
+// @Failure 405 {object} APIResponse "Метод не разрешен"
+// @Router /webhook [post]
 func handleN8nWebhook(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		sendJSONError(w, "Только POST", http.StatusMethodNotAllowed)
@@ -168,6 +200,13 @@ func handleN8nWebhook(w http.ResponseWriter, r *http.Request) {
 	sendJSONResponse(w, APIResponse{Status: "success", Message: "Результат сохранен"})
 }
 
+// handleGetResults godoc
+// @Summary Получить список результатов
+// @Description Возвращает последние результаты обработки документов
+// @Tags results
+// @Produce json
+// @Success 200 {object} APIResponse
+// @Router /results [get]
 func handleGetResults(w http.ResponseWriter, r *http.Request) {
 	responsesMutex.RLock()
 	data := make([]ProcessingResponse, len(responses))
@@ -180,6 +219,13 @@ func handleGetResults(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleHealthCheck godoc
+// @Summary Проверка состояния сервиса
+// @Description Возвращает статус работы сервиса, время и версию
+// @Tags Health
+// @Produce json
+// @Success 200 {object} APIResponse "Сервис работает нормально"
+// @Router /health [get]
 func handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 	health := map[string]interface{}{
 		"status":    "healthy",

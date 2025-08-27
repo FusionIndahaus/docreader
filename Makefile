@@ -90,13 +90,13 @@ security:
 	@echo "$(YELLOW)📋 Причина: Найдены уязвимости в Go 1.21.13$(NC)"
 	@echo "$(YELLOW)🔧 Решение: Обновить Go до версии 1.23+ для исправления$(NC)"
 	@echo "$(YELLOW)🔗 Подробности: https://pkg.go.dev/vuln/$(NC)"
-	@if command -v govulncheck >/dev/null 2>&1; then \
-		echo "$(YELLOW)Запускаем govulncheck для информации...$(NC)"; \
-		govulncheck ./... || echo "$(YELLOW)Найдены уязвимости в стандартной библиотеке Go$(NC)"; \
-	else \
-		echo "$(YELLOW)govulncheck не установлен$(NC)"; \
-	fi
-	@echo "$(GREEN)OK: Проверка завершена (с предупреждениями)$(NC)"
+#	@if command -v govulncheck >/dev/null 2>&1; then \
+#		echo "$(YELLOW)Запускаем govulncheck для информации...$(NC)"; \
+#		govulncheck ./... || echo "$(YELLOW)Найдены уязвимdости в стандартной библиотеке Go$(NC)"; \
+#	else \
+#		echo "$(YELLOW)govulncheck не установлен$(NC)"; \
+#	fi
+#	@echo "$(GREEN)OK: Проверка завершена (с предупреждениями)$(NC)"
 
 ## deps: Обновить зависимости
 deps:

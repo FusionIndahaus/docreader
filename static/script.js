@@ -22,6 +22,7 @@ class DocumentAIApp {
         this.loadExistingResults();
         this.connectLiveUpdates();
         this.animateOnLoad();
+        this.initTheme();
     }
     
     setupEventListeners() {
@@ -33,7 +34,40 @@ class DocumentAIApp {
         this.setupDragAndDrop();
         
         this.refreshBtn.addEventListener('click', () => this.loadExistingResults());
+        const themeSwitch = document.getElementById('themeSwitch');
+        if (themeSwitch) {
+            themeSwitch.addEventListener('change', () => this.toggleTheme());
+        }
+        // Делегируем клик по кнопке очистки, чтобы работало надёжно
+        this.form.addEventListener('click', (e) => {
+            const target = e.target.closest('.selected-file-clear');
+            if (target && target.id === 'clearFileBtn') {
+                e.preventDefault();
+                e.stopPropagation();
+                this.clearSelectedFile();
+            }
+        });
         
+    }
+
+    initTheme() {
+        const saved = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', saved);
+        const themeSwitch = document.getElementById('themeSwitch');
+        if (themeSwitch) {
+            themeSwitch.checked = saved === 'dark';
+        }
+    }
+
+    toggleTheme() {
+        const current = document.documentElement.getAttribute('data-theme') || 'light';
+        const next = current === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('theme', next);
+        const themeSwitch = document.getElementById('themeSwitch');
+        if (themeSwitch) {
+            themeSwitch.checked = next === 'dark';
+        }
     }
     
     connectLiveUpdates() {
@@ -140,7 +174,11 @@ class DocumentAIApp {
         this.setLoadingState(true);
         
         try {
-            
+            // Прогресс-бар (визуальный, клиентский)
+            const progressEl = document.getElementById('uploadBar');
+            if (progressEl) {
+                progressEl.style.width = '15%';
+            }
             const formData = new FormData();
             formData.append('message', document.getElementById('message').value.trim());
             formData.append('file', this.selectedFile);
@@ -152,6 +190,9 @@ class DocumentAIApp {
                 body: formData
             });
             
+            if (progressEl) {
+                progressEl.style.width = '70%';
+            }
             const result = await response.json();
             
             if (!response.ok) {
@@ -160,6 +201,10 @@ class DocumentAIApp {
             
             this.showSuccess(result.message);
             this.clearForm();
+            if (progressEl) {
+                progressEl.style.width = '100%';
+                setTimeout(() => { progressEl.style.width = '0%'; }, 700);
+            }
             
             setTimeout(() => this.loadExistingResults(), 2000);
             
@@ -199,6 +244,14 @@ class DocumentAIApp {
         
         this.selectedFile = file;
         this.updateFilePreview(file);
+
+        // Показать красивую строку выбранного файла
+        const selectedRow = document.getElementById('selectedFile');
+        const nameEl = document.getElementById('selectedFileName');
+        if (selectedRow && nameEl) {
+            nameEl.textContent = file.name;
+            selectedRow.hidden = false;
+        }
     }
     
     updateFilePreview(file) {
@@ -211,6 +264,11 @@ class DocumentAIApp {
         this.selectedFile = null;
         this.fileInput.value = '';
         this.fileNameSpan.textContent = 'Файл не выбран';
+        const selectedRow = document.getElementById('selectedFile');
+        const nameEl = document.getElementById('selectedFileName');
+        if (nameEl) nameEl.textContent = 'Файл не выбран';
+        if (selectedRow) selectedRow.hidden = true;
+        this.fileInput.focus();
         
     }
     

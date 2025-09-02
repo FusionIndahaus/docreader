@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,6 +12,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+    <div class="theme-bg theme-bg--light" aria-hidden="true"></div>
+    <div class="theme-bg theme-bg--dark" aria-hidden="true"></div>
+    <div class="background-effects" aria-hidden="true"></div>
     <div class="container">
         <header>
             <h1>Интеллектуальная обработка документов</h1>
@@ -19,7 +22,7 @@
         </header>
         
         <main>
-            <div class="card">
+            <div class="card glass neon">
                 <form id="uploadForm" action="/submit" method="post" enctype="multipart/form-data">
                     <div class="form-group">
                         <label for="message">Опишите документ:</label>
@@ -28,12 +31,29 @@
                     
                     <div class="form-group">
                         <label for="file">Выберите PDF или изображение:</label>
-                        <div class="file-input-container">
+                        <div class="file-input-container dropzone upload-zone">
                             <input type="file" id="file" name="file" accept=".pdf, .jpg, .jpeg, .png" required>
-                            <label for="file" class="file-label">
-                                <span class="file-text">Выберите файл</span>
-                            </label>
-                            <span id="file-name" class="file-name">Файл не выбран</span>
+
+                            <div class="upload-zone-content">
+                                <div class="upload-text">
+                                    <label for="file" class="file-label btn-primary">
+                                        <span class="file-text">Выберите файл</span>
+                                    </label>
+                                    <div class="upload-subtitle">или</div>
+                                    <div class="upload-title">перетащите сюда</div>
+                                </div>
+                            </div>
+
+                            <div class="selected-file" id="selectedFile" hidden>
+                                <span class="selected-file-name" id="selectedFileName">Файл не выбран</span>
+                                <button type="button" class="selected-file-clear" id="clearFileBtn" aria-label="Очистить файл">✕</button>
+                            </div>
+
+                            <span id="file-name" class="file-name" style="display:none;">Файл не выбран</span>
+
+                            <div class="upload-progress" aria-hidden="true">
+                                <div class="upload-bar" id="uploadBar"></div>
+                            </div>
                         </div>
                     </div>
                     
@@ -47,12 +67,12 @@
                     </div>
                     
                     <div class="form-group">
-                        <button type="submit" id="submitBtn">Начать обработку</button>
+                        <button type="submit" id="submitBtn" class="btn-glow">Начать обработку</button>
                     </div>
                 </form>
             </div>
             
-            <div class="card feature-list">
+            <div class="card feature-list glass">
                 <h3>Возможности системы</h3>
                 <ul class="features">
                     <li class="feature-item">
@@ -81,11 +101,11 @@
             
             <div id="statusMessage" class="status-message"></div>
             
-            <div class="card response-section">
+            <div class="card response-section glass">
                 <div class="response-header">
                     <h2>Результаты анализа</h2>
                     <div class="response-controls">
-                        <button id="refreshBtn" class="refresh-btn">Обновить результаты</button>
+                        <button id="refreshBtn" class="refresh-btn btn-glow">Обновить результаты</button>
                     </div>
                 </div>
                 <div id="responseList" class="response-list">
@@ -97,6 +117,14 @@
         <footer>
             <p>&copy; 2025 Система интеллектуальной обработки документов</p>
         </footer>
+    </div>
+    <div class="theme-switcher">
+        <input type="checkbox" id="themeSwitch" aria-label="Переключить тему">
+        <label for="themeSwitch" class="switch">
+            <span class="switch-glow"></span>
+            <span class="switch-icon sun">☀️</span>
+            <span class="switch-icon moon">🌙</span>
+        </label>
     </div>
     
     <script src="/static/script.js"></script>

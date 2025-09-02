@@ -297,6 +297,8 @@ func handleEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
+	// Отключаем буферизацию на стороне Nginx/Accelerated proxies
+	w.Header().Set("X-Accel-Buffering", "no")
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -334,6 +336,10 @@ func handleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	flusher.Flush()
 
+	// Heartbeat, чтобы соединение не простаивало и не обрывалось прокси
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
 	// Основной цикл отправки событий
 	for {
 		select {
@@ -342,6 +348,10 @@ func handleEvents(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			fmt.Fprintf(w, "data: %s\n\n", toJSON(resp))
+			flusher.Flush()
+		case <-ticker.C:
+			// Комментарий SSE (heartbeat)
+			fmt.Fprintf(w, ": keep-alive\n\n")
 			flusher.Flush()
 		case <-r.Context().Done():
 			return

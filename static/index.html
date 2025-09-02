@@ -38,6 +38,15 @@
                     </div>
                     
                     <div class="form-group">
+                        <label>Формат результата:</label>
+                        <div class="radio-group">
+                            <label class="radio-chip" data-format="csv"><input type="radio" name="outputFormat" value="csv" checked><span>CSV</span></label>
+                            <label class="radio-chip" data-format="xlsx"><input type="radio" name="outputFormat" value="xlsx"><span>XLSX</span></label>
+                            <label class="radio-chip" data-format="json"><input type="radio" name="outputFormat" value="json"><span>JSON</span></label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
                         <button type="submit" id="submitBtn">Начать обработку</button>
                     </div>
                 </form>

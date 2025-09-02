@@ -637,3 +637,82 @@ footer:before {
         justify-content: center;
     }
 } 
+
+/* Радио-группа в одну строку с чипами */
+.radio-group {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.radio-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 10px 14px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #eef2ff, #f5f8ff);
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    user-select: none;
+    transition: var(--transition);
+    box-shadow: var(--shadow-sm);
+    position: relative;
+    overflow: hidden;
+}
+
+.radio-chip:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+.radio-chip input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.radio-chip span {
+    font-weight: 500;
+    color: var(--primary-dark);
+    letter-spacing: 0.3px;
+}
+
+/* Активное состояние */
+.radio-chip input[type="radio"]:checked + span {
+    color: white;
+}
+
+/* Градиентная подсветка активного чипа */
+.radio-chip[data-format="json"]:has(input[type="radio"]:checked) {
+    background: linear-gradient(135deg, #00c6ff, #0072ff);
+    border-color: transparent;
+}
+.radio-chip[data-format="csv"]:has(input[type="radio"]:checked) {
+    background: linear-gradient(135deg, #43e97b, #38f9d7);
+    border-color: transparent;
+}
+.radio-chip[data-format="xlsx"]:has(input[type="radio"]:checked) {
+    background: linear-gradient(135deg, #f7971e, #ffd200);
+    border-color: transparent;
+}
+
+/* Маленькая пульсирующая точка при активном выборе */
+.radio-chip:has(input[type="radio"]:checked)::after {
+    content: '';
+    width: 6px;
+    height: 6px;
+    background: rgba(255,255,255,0.9);
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    border-radius: 50%;
+    box-shadow: 0 0 0 0 rgba(255,255,255,0.6);
+    animation: pulseDot 1.4s infinite;
+}
+
+@keyframes pulseDot {
+    0% { box-shadow: 0 0 0 0 rgba(255,255,255,0.6); }
+    70% { box-shadow: 0 0 0 10px rgba(255,255,255,0); }
+    100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); }
+} 

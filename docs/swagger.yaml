@@ -8,7 +8,7 @@ definitions:
       status:
         type: string
     type: object
-host: localhost:8080
+host: 45.82.153.200
 info:
   contact: {}
   description: API для загрузки и обработки документов через n8n

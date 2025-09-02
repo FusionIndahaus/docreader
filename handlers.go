@@ -8,6 +8,7 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -104,6 +105,73 @@ func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 func handleN8nWebhook(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		sendJSONError(w, "Только POST", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Проверяем: multipart/form-data или application/json
+	contentType := r.Header.Get("Content-Type")
+	if strings.HasPrefix(contentType, "multipart/form-data") {
+		// режим загрузки файла (CSV)
+		if err := r.ParseMultipartForm(maxFileSize); err != nil {
+			sendJSONError(w, "Файл слишком большой или проблемы с формой", http.StatusBadRequest)
+			return
+		}
+
+		file, header, err := r.FormFile("file")
+		if err != nil {
+			sendJSONError(w, "Не удалось получить файл: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+
+		ext := strings.ToLower(filepath.Ext(header.Filename))
+		if ext != ".csv" {
+			sendJSONError(w, "Поддерживаются только CSV файлы", http.StatusBadRequest)
+			return
+		}
+
+		saveDir := getEnv("CSV_SAVE_DIR", "data/csv")
+		if err := os.MkdirAll(saveDir, 0755); err != nil {
+			log.Printf("ERROR: не удалось создать каталог %s: %v", saveDir, err)
+			sendJSONError(w, "Ошибка сервера: невозможно создать каталог", http.StatusInternalServerError)
+			return
+		}
+
+		baseName := strings.TrimSpace(r.FormValue("name"))
+		if baseName == "" {
+			baseName = strings.TrimSuffix(header.Filename, ext)
+		}
+		safeName := sanitizeFileName(baseName) + ".csv"
+		savePath := filepath.Join(saveDir, safeName)
+
+		// если имя занято — добавляем timestamp
+		if _, err := os.Stat(savePath); err == nil {
+			ts := time.Now().Unix()
+			savePath = filepath.Join(saveDir, fmt.Sprintf("%s_%d.csv", sanitizeFileName(baseName), ts))
+		}
+
+		out, err := os.Create(savePath)
+		if err != nil {
+			log.Printf("ERROR: не удалось создать файл %s: %v", savePath, err)
+			sendJSONError(w, "Ошибка сервера: невозможно сохранить файл", http.StatusInternalServerError)
+			return
+		}
+		defer out.Close()
+
+		if _, err := io.Copy(out, file); err != nil {
+			log.Printf("ERROR: ошибка записи файла %s: %v", savePath, err)
+			sendJSONError(w, "Ошибка при сохранении файла", http.StatusInternalServerError)
+			return
+		}
+
+		// успешный ответ
+		sendJSONResponse(w, APIResponse{
+			Status:  "success",
+			Message: "CSV успешно сохранён",
+			Data: map[string]string{
+				"path": savePath,
+			},
+		})
 		return
 	}
 

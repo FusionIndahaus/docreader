@@ -121,7 +121,7 @@ func handleN8nWebhook(w http.ResponseWriter, r *http.Request) {
 	// Проверяем: multipart/form-data или application/json
 	contentType := r.Header.Get("Content-Type")
 	if strings.HasPrefix(contentType, "multipart/form-data") {
-		// режим загрузки файла (CSV)
+		// режим загрузки файла (любой тип)
 		if err := r.ParseMultipartForm(maxFileSize); err != nil {
 			sendJSONError(w, "Файл слишком большой или проблемы с формой", http.StatusBadRequest)
 			return
@@ -134,30 +134,34 @@ func handleN8nWebhook(w http.ResponseWriter, r *http.Request) {
 		}
 		defer file.Close()
 
-		ext := strings.ToLower(filepath.Ext(header.Filename))
-		if ext != ".csv" {
-			sendJSONError(w, "Поддерживаются только CSV файлы", http.StatusBadRequest)
-			return
-		}
-
-		saveDir := getEnv("CSV_SAVE_DIR", "data/csv")
+		// Каталог для сохранения любых загруженных файлов
+		saveDir := getEnv("UPLOAD_DIR", "/tmp/document-ai/uploads")
 		if err := os.MkdirAll(saveDir, 0755); err != nil {
 			log.Printf("ERROR: не удалось создать каталог %s: %v", saveDir, err)
 			sendJSONError(w, "Ошибка сервера: невозможно создать каталог", http.StatusInternalServerError)
 			return
 		}
 
+		// Определяем имя файла: form name/fileName -> иначе исходное
+		ext := strings.ToLower(filepath.Ext(header.Filename))
 		baseName := strings.TrimSpace(r.FormValue("name"))
+		if baseName == "" {
+			baseName = strings.TrimSpace(r.FormValue("fileName"))
+		}
 		if baseName == "" {
 			baseName = strings.TrimSuffix(header.Filename, ext)
 		}
-		safeName := sanitizeFileName(baseName) + ".csv"
-		savePath := filepath.Join(saveDir, safeName)
+		safeName := sanitizeFileName(baseName)
+		if safeName == "" {
+			safeName = "file"
+		}
+		finalName := safeName + ext
+		savePath := filepath.Join(saveDir, finalName)
 
 		// если имя занято — добавляем timestamp
 		if _, err := os.Stat(savePath); err == nil {
 			ts := time.Now().Unix()
-			savePath = filepath.Join(saveDir, fmt.Sprintf("%s_%d.csv", sanitizeFileName(baseName), ts))
+			savePath = filepath.Join(saveDir, fmt.Sprintf("%s_%d%s", safeName, ts, ext))
 		}
 
 		out, err := os.Create(savePath)
@@ -174,12 +178,48 @@ func handleN8nWebhook(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// успешный ответ
+		// Формируем и транслируем событие для SSE-подписчиков (универсально)
+		incomingMessage := strings.TrimSpace(r.FormValue("message"))
+		if incomingMessage == "" {
+			incomingMessage = "Файл успешно сохранён"
+		}
+		resp := ProcessingResponse{
+			ID:        generateSimpleID(),
+			Text:      incomingMessage,
+			Timestamp: time.Now(),
+			Status:    "completed",
+			Download:  "/download?name=" + filepath.Base(savePath),
+		}
+
+		responsesMutex.Lock()
+		responses = append(responses, resp)
+		if len(responses) > maxResponses {
+			responses = responses[len(responses)-maxResponses:]
+		}
+		responsesMutex.Unlock()
+
+		// Оповестим подписчиков SSE неблокирующе
+		go func(rp ProcessingResponse) {
+			subscribersMux.RLock()
+			for ch := range subscribers {
+				select {
+				case ch <- rp:
+				default:
+				}
+			}
+			subscribersMux.RUnlock()
+		}(resp)
+
+		// Ответ клиенту с подробной информацией
 		sendJSONResponse(w, APIResponse{
 			Status:  "success",
-			Message: "CSV успешно сохранён",
-			Data: map[string]string{
-				"path": savePath,
+			Message: "Файл успешно сохранён",
+			Data: map[string]interface{}{
+				"path":        savePath,
+				"fileName":    header.Filename,
+				"savedName":   filepath.Base(savePath),
+				"download":    "/download?name=" + filepath.Base(savePath),
+				"contentType": header.Header.Get("Content-Type"),
 			},
 		})
 		return
@@ -403,6 +443,55 @@ func handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 		Status: "success",
 		Data:   health,
 	})
+}
+
+// handleDownload godoc
+// @Summary Скачать сохранённый файл
+// @Description Выдаёт файл по имени из каталога UPLOAD_DIR
+// @Tags Files
+// @Produce octet-stream
+// @Param name query string true "Имя сохранённого файла"
+// @Success 200 {file} file
+// @Failure 400 {object} APIResponse
+// @Failure 404 {object} APIResponse
+// @Router /download [get]
+func handleDownload(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.URL.Query().Get("name"))
+	if name == "" {
+		sendJSONError(w, "Не указано имя файла", http.StatusBadRequest)
+		return
+	}
+
+	// Защита от path traversal
+	if strings.Contains(name, "/") || strings.Contains(name, "\\") {
+		sendJSONError(w, "Некорректное имя файла", http.StatusBadRequest)
+		return
+	}
+
+	uploadDir := getEnv("UPLOAD_DIR", "/tmp/document-ai/uploads")
+	filePath := filepath.Join(uploadDir, name)
+
+	info, err := os.Stat(filePath)
+	if err != nil || info.IsDir() {
+		sendJSONError(w, "Файл не найден", http.StatusNotFound)
+		return
+	}
+
+	// Ставим заголовки для принудительного скачивания
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", "attachment; filename=\""+name+"\"")
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", info.Size()))
+
+	f, err := os.Open(filePath)
+	if err != nil {
+		sendJSONError(w, "Не удалось открыть файл", http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
+
+	if _, err := io.Copy(w, f); err != nil {
+		log.Printf("ERROR: Ошибка отдачи файла %s: %v", filePath, err)
+	}
 }
 
 func sendToN8n(message string, file multipart.File, fileName string, outputFormat string) error {

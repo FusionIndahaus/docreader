@@ -18,15 +18,14 @@ class DocumentAIApp {
     }
     
     init() {
+        this.initTheme();
         this.setupEventListeners();
         this.loadExistingResults();
-        this.connectLiveUpdates();
         this.animateOnLoad();
-        this.initTheme();
+        this.connectLiveUpdates();
     }
     
     setupEventListeners() {
-        
         this.form.addEventListener('submit', (e) => this.handleFormSubmit(e));
         
         this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
@@ -77,6 +76,10 @@ class DocumentAIApp {
                 try {
                     const payload = JSON.parse(event.data);
                     if (payload && payload.id) {
+                        // Автоскачивание, если есть ссылка
+                        if (payload.download) {
+                            this.triggerDownload(payload.download);
+                        }
                         // добавляем или обновляем локальный список
                         const existsIndex = this.results.findIndex(r => r.id === payload.id);
                         if (existsIndex >= 0) {
@@ -174,15 +177,11 @@ class DocumentAIApp {
         this.setLoadingState(true);
         
         try {
-            // Прогресс-бар (визуальный, клиентский)
-            const progressEl = document.getElementById('uploadBar');
-            if (progressEl) {
-                progressEl.style.width = '15%';
-            }
             const formData = new FormData();
             formData.append('message', document.getElementById('message').value.trim());
             formData.append('file', this.selectedFile);
-            const selectedFormat = (document.querySelector('input[name="outputFormat"]:checked')?.value || 'json').toLowerCase();
+            // Добавляем выбранный формат результата
+            const selectedFormat = (document.querySelector('input[name="outputFormat"]:checked')?.value || 'csv').toLowerCase();
             formData.append('outputFormat', selectedFormat);
             
             const response = await fetch('/upload', {
@@ -190,23 +189,21 @@ class DocumentAIApp {
                 body: formData
             });
             
-            if (progressEl) {
-                progressEl.style.width = '70%';
-            }
             const result = await response.json();
             
             if (!response.ok) {
                 throw new Error(result.message || `Ошибка сервера: ${response.status}`);
             }
             
-            this.showSuccess(result.message);
-            this.clearForm();
-            if (progressEl) {
-                progressEl.style.width = '100%';
-                setTimeout(() => { progressEl.style.width = '0%'; }, 700);
+            // Если сервер вернул download-ссылку — запускаем скачивание
+            const dl = result?.data?.download;
+            if (dl) {
+                this.triggerDownload(dl);
             }
             
-            setTimeout(() => this.loadExistingResults(), 2000);
+            this.showSuccess(result.message);
+            this.clearForm();
+            setTimeout(() => this.loadExistingResults(), 1000);
             
         } catch (error) {
             console.error('ERROR: Ошибка загрузки:', error);
@@ -214,6 +211,19 @@ class DocumentAIApp {
         } finally {
             this.isUploading = false;
             this.setLoadingState(false);
+        }
+    }
+
+    triggerDownload(url) {
+        try {
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        } catch (e) {
+            console.warn('WARN: Не удалось инициировать автоскачивание', e);
         }
     }
     
@@ -310,19 +320,6 @@ class DocumentAIApp {
         
     }
     
-    async copyToClipboard(resultId) {
-        const result = this.results.find(r => r.id === resultId);
-        if (!result) return;
-        
-        try {
-            await navigator.clipboard.writeText(result.text);
-            this.showSuccess('Текст скопирован в буфер обмена');
-        } catch (error) {
-            console.error('ERROR: Ошибка копирования:', error);
-            this.showError('Не удалось скопировать текст');
-        }
-    }
-    
     clearForm() {
         document.getElementById('message').value = '';
         this.clearSelectedFile();
@@ -356,19 +353,6 @@ class DocumentAIApp {
     
     showError(message) {
         this.showMessage(message, 'error');
-    }
-    
-    showInfo(message) {
-        this.showMessage(message, 'info');
-    }
-    
-    
-    formatFileSize(bytes) {
-        if (bytes === 0) return '0 Б';
-        const k = 1024;
-        const sizes = ['Б', 'КБ', 'МБ', 'ГБ'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
     }
     
     getFileIcon(filename) {

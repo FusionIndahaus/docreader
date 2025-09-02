@@ -15,9 +15,9 @@ func setupRoutes() {
 	http.HandleFunc("/", handleHome)
 	http.HandleFunc("/upload", handleFileUpload)
 	http.HandleFunc("/webhook", handleN8nWebhook)
-	http.HandleFunc("/webhook-test", handleN8nWebhook)
 	http.HandleFunc("/results", handleGetResults)
 	http.HandleFunc("/events", handleEvents)
 	http.HandleFunc("/health", handleHealthCheck)
+	http.HandleFunc("/download", handleDownload)
 	http.Handle("/swagger/", httpSwagger.WrapHandler)
 }

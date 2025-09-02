@@ -399,9 +399,7 @@ func sendToN8n(message string, file multipart.File, fileName string, outputForma
 	var buffer bytes.Buffer
 	writer := multipart.NewWriter(&buffer)
 
-	// Дублируем в промпт пользователя требуемый формат
-	messageWithFormat := message + "\n" + "Верни данные в виде " + outputFormat
-	if err := writer.WriteField("message", messageWithFormat); err != nil {
+	if err := writer.WriteField("message", message); err != nil {
 		return fmt.Errorf("не удалось добавить сообщение: %w", err)
 	}
 

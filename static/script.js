@@ -144,6 +144,8 @@ class DocumentAIApp {
             const formData = new FormData();
             formData.append('message', document.getElementById('message').value.trim());
             formData.append('file', this.selectedFile);
+            const selectedFormat = (document.querySelector('input[name="outputFormat"]:checked')?.value || 'json').toLowerCase();
+            formData.append('outputFormat', selectedFormat);
             
             const response = await fetch('/upload', {
                 method: 'POST',

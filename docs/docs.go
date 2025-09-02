@@ -103,6 +103,18 @@ const docTemplate = `{
                         "required": true
                     },
                     {
+                        "type": "string",
+                        "description": "Формат результата",
+                        "name": "outputFormat",
+                        "in": "formData",
+                        "required": false,
+                        "enum": [
+                            "json",
+                            "csv",
+                            "xlsx"
+                        ]
+                    },
+                    {
                         "type": "file",
                         "description": "Файл документа",
                         "name": "file",

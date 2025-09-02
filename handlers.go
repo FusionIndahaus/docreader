@@ -43,6 +43,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 // @Accept multipart/form-data
 // @Produce json
 // @Param message formData string true "Описание документа"
+// @Param outputFormat formData string false "Формат результата" Enums(json, csv, xlsx) Default(json)
 // @Param file formData file true "Файл документа"
 // @Success 200 {object} APIResponse "Документ успешно отправлен на обработку"
 // @Failure 400 {object} APIResponse "Ошибки валидации или проблемы с файлом"
@@ -66,6 +67,15 @@ func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Читаем желаемый формат результата, по умолчанию json
+	outputFormat := strings.ToLower(strings.TrimSpace(r.FormValue("outputFormat")))
+	switch outputFormat {
+	case "json", "csv", "xlsx":
+		// валидный формат
+	default:
+		outputFormat = "json"
+	}
+
 	file, header, err := r.FormFile("file")
 	if err != nil {
 		sendJSONError(w, "Не удалось получить файл: "+err.Error(), http.StatusBadRequest)
@@ -78,7 +88,7 @@ func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := sendToN8n(message, file, header.Filename); err != nil {
+	if err := sendToN8n(message, file, header.Filename, outputFormat); err != nil {
 		log.Printf("ERROR: Ошибка отправки в n8n: %v", err)
 		sendJSONError(w, "Не удалось обработать документ: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -317,12 +327,18 @@ func handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func sendToN8n(message string, file multipart.File, fileName string) error {
+func sendToN8n(message string, file multipart.File, fileName string, outputFormat string) error {
 	var buffer bytes.Buffer
 	writer := multipart.NewWriter(&buffer)
 
-	if err := writer.WriteField("message", message); err != nil {
+	// Дублируем в промпт пользователя требуемый формат
+	messageWithFormat := message + "\n" + "Верни данные в виде " + outputFormat
+	if err := writer.WriteField("message", messageWithFormat); err != nil {
 		return fmt.Errorf("не удалось добавить сообщение: %w", err)
+	}
+
+	if err := writer.WriteField("outputFormat", outputFormat); err != nil {
+		return fmt.Errorf("не удалось добавить формат результата: %w", err)
 	}
 
 	if err := writer.WriteField("fileName", fileName); err != nil {

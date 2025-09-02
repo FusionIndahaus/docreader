@@ -70,6 +70,15 @@ paths:
         name: message
         required: true
         type: string
+      - description: Формат результата
+        in: formData
+        name: outputFormat
+        required: false
+        type: string
+        enum:
+        - json
+        - csv
+        - xlsx
       - description: Файл документа
         in: formData
         name: file

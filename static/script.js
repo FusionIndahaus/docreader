@@ -10,6 +10,12 @@ class DocumentAIApp {
         this.refreshBtn = document.getElementById('refreshBtn');
         this.responseList = document.getElementById('responseList');
         
+        // Колонки 1С
+        this.columnsInput = document.getElementById('columns1cInput');
+        this.columnsChips = document.getElementById('columns1cChips');
+        this.columnsHidden = document.getElementById('columns1c');
+        this.columns = [];
+        
         this.isUploading = false;
         this.selectedFile = null;
         this.results = [];
@@ -47,6 +53,28 @@ class DocumentAIApp {
             }
         });
         
+        // Обработка ввода колонок 1С
+        if (this.columnsInput) {
+            this.columnsInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.tryAddColumnsFromInput();
+                }
+            });
+            this.columnsInput.addEventListener('blur', () => {
+                // Добавим остаток при уходе фокуса
+                this.tryAddColumnsFromInput();
+            });
+        }
+        if (this.columnsChips) {
+            this.columnsChips.addEventListener('click', (e) => {
+                const btn = e.target.closest('.chip-remove');
+                if (!btn) return;
+                const value = btn.getAttribute('data-value');
+                this.removeColumn(value);
+            });
+        }
+        
     }
 
     initTheme() {
@@ -79,6 +107,8 @@ class DocumentAIApp {
                         // Автоскачивание, если есть ссылка
                         if (payload.download) {
                             this.triggerDownload(payload.download);
+                            // После основного файла — скачиваем README с инструкцией 1С
+                            this.triggerReadmeDownloadOnce(payload.id);
                         }
                         // добавляем или обновляем локальный список
                         const existsIndex = this.results.findIndex(r => r.id === payload.id);
@@ -102,6 +132,16 @@ class DocumentAIApp {
         }
     }
 
+    // Не скачивать README несколько раз для одного результата
+    triggerReadmeDownloadOnce(id) {
+        if (!this._processedReadmeIds) {
+            this._processedReadmeIds = new Set();
+        }
+        if (this._processedReadmeIds.has(id)) return;
+        this._processedReadmeIds.add(id);
+        this.downloadReadmeForLatestColumns();
+    }
+    
     setupDragAndDrop() {
         const dropZone = this.form;
         
@@ -183,6 +223,10 @@ class DocumentAIApp {
             // Добавляем выбранный формат результата
             const selectedFormat = (document.querySelector('input[name="outputFormat"]:checked')?.value || 'csv').toLowerCase();
             formData.append('outputFormat', selectedFormat);
+            // Добавляем колонки 1С
+            formData.append('columns1c', (this.columns || []).join(','));
+            // Сохраним последние колонки локально для README
+            try { localStorage.setItem('columns1c:last', JSON.stringify(this.columns || [])); } catch {}
             
             const response = await fetch('/upload', {
                 method: 'POST',
@@ -199,6 +243,8 @@ class DocumentAIApp {
             const dl = result?.data?.download;
             if (dl) {
                 this.triggerDownload(dl);
+                // README с инструкцией после основного файла
+                this.downloadReadmeForLatestColumns();
             }
             
             this.showSuccess(result.message);
@@ -214,6 +260,63 @@ class DocumentAIApp {
         }
     }
 
+    downloadReadmeForLatestColumns() {
+        let columns = this.columns;
+        try {
+            if ((!columns || columns.length === 0)) {
+                columns = JSON.parse(localStorage.getItem('columns1c:last') || '[]');
+            }
+        } catch {}
+        const text = this.generateReadmeText(columns || []);
+        this.downloadTextAsFile(text, 'README_1C.txt');
+    }
+
+    generateReadmeText(columns) {
+        const normalized = (columns || [])
+            .map((c) => String(c || '').trim())
+            .filter((c) => c.length > 0);
+        const assignments = normalized.map((col, idx) => {
+            // Формируем безопасный идентификатор свойства 1С (пробелы -> без пробелов)
+            const prop = this.to1CIdentifier(col);
+            return `      НоваяСтрока.${prop} = МассивСлов[${idx}];`;
+        }).join('\n');
+
+        const header = `Инструкция по созданию кнопки открытия CSV файла в 1С\n\n` +
+        `1) Зайдите в конфигуратор 1С\n` +
+        `2) Перейдите на форму, где требуется импорт\n` +
+        `3) Создайте кнопки "прочитать файл" и "записать данные"\n` +
+        `4) На кнопке "прочитать файл": выберите действие "Прочитать файл"\n` +
+        `5) Вставьте следующий код:`;
+
+        const code = `\n\n&НаКлиенте\nПроцедура ПутьКФайлуНачалоВыбора(Элемент, ДанныеВыбора, ВыборДобавлением, СтандартнаяОбработка)\n  Проводник = Новый ДиалогВыбораФайла(РежимДиалогаВыбораФайла.Открытие);\n  Проводник.Заголовок = "Выберите файл с компьютера";\n  \n  Если Объект.ФорматФайла = "CSV" Тогда\n    Фильтр = "CSV Файл|*.csv";\n  ИначеЕсли Объект.ФорматФайла = "XLSX" Тогда\n    Фильтр = "XLSX файл|*.xlsx";\n  Иначе\n    Возврат;\n  КонецЕсли;\n  \n  Проводник.Фильтр = Фильтр;\n  \n  Оповещение = Новый ОписаниеОповещения("ПослеВыбораФайла", ЭтотОбъект);\n  Проводник.Показать(Оповещение);  \nКонецПроцедуры\n\n&НаКлиенте\nПроцедура ПослеВыбораФайла(ВыбранныеФайлы, ДополнительныеПараметры) Экспорт\n  Если ВыбранныеФайлы = неопределено Тогда\n    Возврат;\n  КонецЕсли;\n  \n  Объект.ПутьКФайлу = ВыбранныеФайлы[0];\n  \nКонецПроцедуры\n\n\n&НаКлиенте\nПроцедура ПрочитатьФайл(Команда)\n  Объект.ДанныеФайла.Очистить();\n  \n  Если Объект.ФорматФайла = "CSV" Тогда\n    ПрочитатьФайлCSV();  \n  КонецЕсли;\nКонецПроцедуры \n\n &НаКлиенте\nПроцедура ПрочитатьФайлCSV()\n ПоследовательноеЧтение = Истина;\n  Если ПоследовательноеЧтение Тогда\n    \n    Текст = Новый ЧтениеТекста;\n    Текст.Открыть(Объект.ПутьКФайлу);\n    \n    ТекСтрока = Текст.ПрочитатьСтроку();\n    Пока ТекСтрока <> Неопределено Цикл\n      \n      МассивСлов = СтрРазделить(ТекСтрока, ",");\n      Если МассивСлов.Количество() < ${Math.max(1, normalized.length)} Тогда\n        Продолжить;\n      КонецЕсли;\n      \n      НоваяСтрока = Объект.ДанныеФайла.Добавить();\n${assignments || '      // Добавьте присвоения полей в соответствии с вашими колонками'}\n      \n      ТекСтрока = Текст.ПрочитатьСтроку();\n      \n    КонецЦикла;\n  Иначе\n    Текст = Новый ТекстовыйДокумент;\n    Текст.Прочитать(Объект.ПутьКФайлу);\n    Для НомерСтроки=1 По Текст.КоличествоСтрок() Цикл\n      \n      ТекСтрока = Текст.ПолучитьСтроку(НомерСтроки);\n      МассивСлов = СтрРазделить(ТекСтрока, ",");\n      Если МассивСлов.Количество() < ${Math.max(1, normalized.length)} Тогда\n        Продолжить;\n      КонецЕсли;\n      \n      НоваяСтрока = Объект.ДанныеФайла.Добавить();\n${assignments || '      // Добавьте присвоения полей в соответствии с вашими колонками'}\n      \n    КонецЦикла;\n  КонецЕсли;\nКонецПроцедуры`;
+
+        return header + code + '\n';
+    }
+
+    to1CIdentifier(name) {
+        // Убираем недопустимые символы, делаем ПаскальКейс
+        const cleaned = String(name).replace(/[^\p{L}\p{N}_\s]/gu, ' ').trim();
+        if (!cleaned) return 'Поле';
+        const parts = cleaned.split(/\s+/).map(p => p.charAt(0).toUpperCase() + p.slice(1));
+        return parts.join('');
+    }
+
+    downloadTextAsFile(text, fileName) {
+        try {
+            const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.warn('WARN: Не удалось скачать README', e);
+        }
+    }
+    
     triggerDownload(url) {
         try {
             const a = document.createElement('a');
@@ -323,6 +426,11 @@ class DocumentAIApp {
     clearForm() {
         document.getElementById('message').value = '';
         this.clearSelectedFile();
+        // Очистка колонок 1С
+        this.columns = [];
+        if (this.columnsChips) this.columnsChips.innerHTML = '';
+        if (this.columnsHidden) this.columnsHidden.value = '';
+        if (this.columnsInput) this.columnsInput.value = '';
     }
     
     setLoadingState(isLoading) {
@@ -385,6 +493,72 @@ class DocumentAIApp {
                 el.style.transform = 'translateY(0)';
             }, index * 100);
         });
+    }
+
+    // ===== Колонки 1С =====
+    tryAddColumnsFromInput() {
+        if (!this.columnsInput) return;
+        const raw = this.columnsInput.value;
+        if (!raw) return;
+        const parts = raw.split(/[,;\n]+/).map(s => this.normalizeColumn(s)).filter(Boolean);
+        if (parts.length === 0) return;
+        parts.forEach(p => this.addColumn(p));
+        this.columnsInput.value = '';
+    }
+
+    normalizeColumn(value) {
+        if (!value) return '';
+        const trimmed = value.trim();
+        if (!trimmed) return '';
+        // Ограничим длину и уберём лишние пробелы внутри
+        const compact = trimmed.replace(/\s+/g, ' ');
+        return compact.slice(0, 64);
+    }
+
+    addColumn(value) {
+        if (!value) return;
+        // без дубликатов (регистр не учитываем)
+        const exists = this.columns.find(c => c.toLowerCase() === value.toLowerCase());
+        if (exists) return;
+        this.columns.push(value);
+        this.renderColumnChip(value);
+        this.syncHiddenColumns();
+    }
+
+    removeColumn(value) {
+        this.columns = this.columns.filter(c => c.toLowerCase() !== String(value || '').toLowerCase());
+        // убрать чип из DOM
+        const chip = this.columnsChips?.querySelector(`.chip[data-value="${CSS.escape(String(value))}"]`);
+        if (chip && chip.parentElement) {
+            chip.parentElement.removeChild(chip);
+        }
+        this.syncHiddenColumns();
+    }
+
+    renderColumnChip(value) {
+        if (!this.columnsChips) return;
+        const chip = document.createElement('div');
+        chip.className = 'chip';
+        chip.setAttribute('data-value', value);
+        chip.innerHTML = `
+            <span class="chip-label">${this.escapeHTML(value)}</span>
+            <button type="button" class="chip-remove" data-value="${this.escapeAttr(value)}" aria-label="Убрать ${this.escapeAttr(value)}">✕</button>
+        `;
+        this.columnsChips.appendChild(chip);
+    }
+
+    syncHiddenColumns() {
+        if (this.columnsHidden) {
+            this.columnsHidden.value = (this.columns || []).join(',');
+        }
+    }
+
+    escapeHTML(str) {
+        return String(str).replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m]));
+    }
+
+    escapeAttr(str) {
+        return this.escapeHTML(str);
     }
 }
 

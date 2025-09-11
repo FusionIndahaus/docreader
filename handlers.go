@@ -45,6 +45,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param message formData string true "Описание документа"
 // @Param outputFormat formData string false "Формат результата" Enums(json, csv, xlsx) Default(json)
+// @Param columns1c formData string false "Список колонок 1С (через запятую)"
 // @Param file formData file true "Файл документа"
 // @Success 200 {object} APIResponse "Документ успешно отправлен на обработку"
 // @Failure 400 {object} APIResponse "Ошибки валидации или проблемы с файлом"
@@ -77,6 +78,9 @@ func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 		outputFormat = "json"
 	}
 
+	// Считываем список колонок 1С (через запятую)
+	columns1c := strings.TrimSpace(r.FormValue("columns1c"))
+
 	file, header, err := r.FormFile("file")
 	if err != nil {
 		sendJSONError(w, "Не удалось получить файл: "+err.Error(), http.StatusBadRequest)
@@ -89,7 +93,7 @@ func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := sendToN8n(message, file, header.Filename, outputFormat); err != nil {
+	if err := sendToN8n(message, file, header.Filename, outputFormat, columns1c); err != nil {
 		log.Printf("ERROR: Ошибка отправки в n8n: %v", err)
 		sendJSONError(w, "Не удалось обработать документ: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -494,7 +498,7 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func sendToN8n(message string, file multipart.File, fileName string, outputFormat string) error {
+func sendToN8n(message string, file multipart.File, fileName string, outputFormat string, columns1c string) error {
 	var buffer bytes.Buffer
 	writer := multipart.NewWriter(&buffer)
 
@@ -504,6 +508,13 @@ func sendToN8n(message string, file multipart.File, fileName string, outputForma
 
 	if err := writer.WriteField("outputFormat", outputFormat); err != nil {
 		return fmt.Errorf("не удалось добавить формат результата: %w", err)
+	}
+
+	// Проксируем список колонок 1С, если задан
+	if columns1c != "" {
+		if err := writer.WriteField("columns1c", columns1c); err != nil {
+			return fmt.Errorf("не удалось добавить columns1c: %w", err)
+		}
 	}
 
 	if err := writer.WriteField("fileName", fileName); err != nil {

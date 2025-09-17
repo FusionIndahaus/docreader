@@ -8,6 +8,8 @@ type ProcessingResponse struct {
 	Timestamp time.Time `json:"timestamp"`
 	Status    string    `json:"status"`
 	Download  string    `json:"download,omitempty"`
+	BatchID   string    `json:"batchId,omitempty"`
+	Seq       int       `json:"seq,omitempty"`
 }
 
 type APIResponse struct {

@@ -1,4 +1,3 @@
-
 class DocumentAIApp {
     constructor() {
         this.form = document.getElementById('uploadForm');
@@ -17,8 +16,9 @@ class DocumentAIApp {
         this.columns = [];
         
         this.isUploading = false;
-        this.selectedFile = null;
+        this.selectedFiles = [];
         this.results = [];
+        this.activeBatch = null; // { id, expected, format, received, downloads: [], responses: [] }
         
         this.init();
     }
@@ -60,6 +60,10 @@ class DocumentAIApp {
                     e.preventDefault();
                     this.tryAddColumnsFromInput();
                 }
+            });
+            // Разбиваем на лету по запятым/точкам с запятой
+            this.columnsInput.addEventListener('input', (e) => {
+                this.handleColumnsTyping(e);
             });
             this.columnsInput.addEventListener('blur', () => {
                 // Добавим остаток при уходе фокуса
@@ -104,20 +108,26 @@ class DocumentAIApp {
                 try {
                     const payload = JSON.parse(event.data);
                     if (payload && payload.id) {
-                        // Автоскачивание, если есть ссылка
-                        if (payload.download) {
-                            this.triggerDownload(payload.download);
-                            // После основного файла — скачиваем README с инструкцией 1С
-                            this.triggerReadmeDownloadOnce(payload.id);
-                        }
-                        // добавляем или обновляем локальный список
-                        const existsIndex = this.results.findIndex(r => r.id === payload.id);
-                        if (existsIndex >= 0) {
-                            this.results[existsIndex] = payload;
+                        const isActiveBatch = this.activeBatch && payload.batchId && payload.batchId === this.activeBatch.id;
+                        if (isActiveBatch) {
+                            this.activeBatch.received += 1;
+                            if (payload.download) this.activeBatch.downloads.push(payload.download);
+                            this.activeBatch.responses.push(payload);
+                            if (this.activeBatch.received >= this.activeBatch.expected) {
+                                const batch = this.activeBatch;
+                                this.activeBatch = null;
+                                this.handleBatchCompleted(batch).catch((e) => console.error('ERROR: batch finalize:', e));
+                            }
                         } else {
-                            this.results.push(payload);
+                            // Не скачиваем автоматически для чужих/прошлых событий
+                            const existsIndex = this.results.findIndex(r => r.id === payload.id);
+                            if (existsIndex >= 0) {
+                                this.results[existsIndex] = payload;
+                            } else {
+                                this.results.push(payload);
+                            }
+                            this.renderResults(this.results);
                         }
-                        this.renderResults(this.results);
                     }
                 } catch (e) {
                     console.error('ERROR: Невалидное SSE сообщение', e);
@@ -201,13 +211,15 @@ class DocumentAIApp {
             throw new Error('Описание слишком короткое. Напишите подробнее что нужно найти');
         }
         
-        if (!this.selectedFile) {
-            throw new Error('Выберите файл для обработки');
+        if (!this.selectedFiles || this.selectedFiles.length === 0) {
+            throw new Error('Выберите один или несколько файлов для обработки');
         }
         
         const maxSize = 50 * 1024 * 1024;
-        if (this.selectedFile.size > maxSize) {
-            throw new Error('Файл слишком большой. Максимальный размер: 50 МБ');
+        for (const f of this.selectedFiles) {
+            if (f.size > maxSize) {
+                throw new Error(`Файл ${f.name} слишком большой. Максимальный размер: 50 МБ`);
+            }
         }
         
     }
@@ -217,39 +229,22 @@ class DocumentAIApp {
         this.setLoadingState(true);
         
         try {
-            const formData = new FormData();
-            formData.append('message', document.getElementById('message').value.trim());
-            formData.append('file', this.selectedFile);
-            // Добавляем выбранный формат результата
             const selectedFormat = (document.querySelector('input[name="outputFormat"]:checked')?.value || 'csv').toLowerCase();
-            formData.append('outputFormat', selectedFormat);
-            // Добавляем колонки 1С
-            formData.append('columns1c', (this.columns || []).join(','));
             // Сохраним последние колонки локально для README
             try { localStorage.setItem('columns1c:last', JSON.stringify(this.columns || [])); } catch {}
-            
-            const response = await fetch('/upload', {
-                method: 'POST',
-                body: formData
-            });
-            
-            const result = await response.json();
-            
-            if (!response.ok) {
-                throw new Error(result.message || `Ошибка сервера: ${response.status}`);
-            }
-            
-            // Если сервер вернул download-ссылку — запускаем скачивание
-            const dl = result?.data?.download;
-            if (dl) {
-                this.triggerDownload(dl);
-                // README с инструкцией после основного файла
-                this.downloadReadmeForLatestColumns();
-            }
-            
-            this.showSuccess(result.message);
-            this.clearForm();
-            setTimeout(() => this.loadExistingResults(), 1000);
+
+            const batchId = this.generateBatchId();
+            this.activeBatch = {
+                id: batchId,
+                expected: this.selectedFiles.length,
+                format: selectedFormat,
+                received: 0,
+                downloads: [],
+                responses: []
+            };
+
+            await this.uploadBatchSequentially(batchId, this.selectedFiles, selectedFormat, (this.columns || []).join(','));
+            // Завершение произойдет по SSE в handleBatchCompleted
             
         } catch (error) {
             console.error('ERROR: Ошибка загрузки:', error);
@@ -257,6 +252,25 @@ class DocumentAIApp {
         } finally {
             this.isUploading = false;
             this.setLoadingState(false);
+        }
+    }
+
+    async uploadBatchSequentially(batchId, files, selectedFormat, columns1cStr) {
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const formData = new FormData();
+            formData.append('message', document.getElementById('message').value.trim());
+            formData.append('file', file);
+            formData.append('outputFormat', selectedFormat);
+            formData.append('columns1c', columns1cStr);
+            formData.append('batchId', batchId);
+            formData.append('seq', String(i + 1));
+
+            const response = await fetch('/upload', { method: 'POST', body: formData });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(result?.message || `Ошибка сервера: ${response.status}`);
+            }
         }
     }
 
@@ -317,10 +331,150 @@ class DocumentAIApp {
         }
     }
     
+    async handleBatchCompleted(batch) {
+        try {
+            // Результат показываем только после завершения батча
+            if (batch.format === 'csv' && batch.downloads.length > 0) {
+                const merged = await this.mergeCsvDownloads(batch.downloads);
+                const outName = `merged_${batch.id}.csv`;
+                this.downloadTextAsFile(merged, outName);
+                this.triggerReadmeDownloadOnce(batch.id);
+                this.showSuccess(`Готово: объединено ${batch.downloads.length} CSV-файлов`);
+            } else {
+                for (const url of batch.downloads) {
+                    this.triggerDownload(url);
+                }
+                this.triggerReadmeDownloadOnce(batch.id);
+                this.showSuccess(`Готово: обработано ${batch.downloads.length} файл(ов)`);
+            }
+
+            const summary = {
+                id: `batch_${batch.id}`,
+                text: `Пакет обработан. Файлов: ${batch.expected}. Формат: ${batch.format.toUpperCase()}.`,
+                timestamp: new Date().toISOString(),
+                status: 'completed'
+            };
+            this.results.push(summary);
+            this.renderResults(this.results);
+
+            this.clearForm();
+            setTimeout(() => this.loadExistingResults(), 1000);
+        } catch (e) {
+            this.showError('Ошибка при объединении результатов');
+            throw e;
+        }
+    }
+
+    async mergeCsvDownloads(urls) {
+        const texts = [];
+        for (const url of urls) {
+            const resp = await fetch(url);
+            const text = await resp.text();
+            texts.push(text);
+        }
+        return this.mergeCsvTexts(texts);
+    }
+
+    mergeCsvTexts(csvTexts) {
+        const canonical = ['date', 'name', 'amount'];
+        const outRows = [];
+
+        for (let i = 0; i < csvTexts.length; i++) {
+            const raw = (csvTexts[i] || '').replace(/^\uFEFF/, '');
+            const lines = raw.split(/\r?\n/).filter(l => l.length > 0);
+            if (lines.length === 0) continue;
+
+            // 1) Разобрать и нормализовать заголовок файла
+            const headerColsRaw = this.splitCsvLine(lines[0] || '');
+            const normalizedHeader = headerColsRaw.map((c) => this.normalizeHeaderValue(String(c || '')));
+
+            // Построить маппинг canonical -> индекс во входном файле
+            const colIndexByCanonical = {};
+            canonical.forEach((col) => {
+                const idx = normalizedHeader.indexOf(col);
+                colIndexByCanonical[col] = idx; // -1 если нет
+            });
+
+            // 2) Преобразовать строки данных в порядок canonical
+            for (let li = 1; li < lines.length; li++) {
+                const values = this.splitCsvLine(lines[li]);
+                const out = canonical.map((col) => {
+                    const idx = colIndexByCanonical[col];
+                    return idx >= 0 && idx < values.length ? String(values[idx] ?? '') : '';
+                });
+                outRows.push(out.map(this.escapeCsv).join(','));
+            }
+        }
+
+        // Возвращаем единый заголовок + все строки
+        const header = canonical.join(',');
+        return [header, ...outRows].join('\n');
+    }
+
+    // Нормализация названий колонок к каноническим именам
+    normalizeHeaderValue(name) {
+        const n = String(name).trim().replace(/^"|"$/g, '').toLowerCase();
+        switch (n) {
+            case 'дата':
+            case 'date':
+                return 'date';
+            case 'имя':
+            case 'фио':
+            case 'name':
+            case 'names':
+                return 'name';
+            case 'сумма':
+            case 'sum':
+            case 'amount':
+                return 'amount';
+            default:
+                return n;
+        }
+    }
+
+    // Разбивает CSV-строку по запятым с учётом кавычек
+    splitCsvLine(line) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+            const ch = line[i];
+            if (ch === '"') {
+                if (inQuotes && line[i + 1] === '"') { // удвоенная кавычка
+                    current += '"';
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (ch === ',' && !inQuotes) {
+                result.push(current);
+                current = '';
+            } else {
+                current += ch;
+            }
+        }
+        result.push(current);
+        return result;
+    }
+
+    // Экранирует значение для CSV (кавычки/запятые/переводы строк)
+    escapeCsv(value) {
+        const v = String(value);
+        if (/[",\n\r]/.test(v)) {
+            return '"' + v.replace(/"/g, '""') + '"';
+        }
+        return v;
+    }
+
+    generateBatchId() {
+        const rnd = Math.random().toString(36).slice(2, 8);
+        return `b${Date.now()}_${rnd}`;
+    }
+    
     triggerDownload(url) {
         try {
             const a = document.createElement('a');
-            a.href = url;
+            a.href = this.normalizeUrlForCurrentOrigin(url);
             a.download = '';
             document.body.appendChild(a);
             a.click();
@@ -329,52 +483,76 @@ class DocumentAIApp {
             console.warn('WARN: Не удалось инициировать автоскачивание', e);
         }
     }
+
+    normalizeUrlForCurrentOrigin(url) {
+        try {
+            if (!url) return url;
+            // Относительные URL оставляем как есть
+            if (url.startsWith('/')) return url;
+            const u = new URL(url, window.location.href);
+            // Если хост совпадает — используем текущий протокол/хост/порт
+            if (u.host === window.location.host) {
+                u.protocol = window.location.protocol;
+                return u.toString();
+            }
+            return url;
+        } catch {
+            return url;
+        }
+    }
     
     handleFileSelect(e) {
-        const files = e.target.files;
+        const files = Array.from(e.target.files || []);
         if (files.length > 0) {
-            this.processSelectedFile(files[0]);
+            this.processSelectedFiles(files);
+        } else {
+            this.clearSelectedFile();
         }
     }
     
     handleFileDrop(e) {
-        const files = e.dataTransfer.files;
+        const files = Array.from(e.dataTransfer.files || []);
         if (files.length > 0) {
-            this.fileInput.files = files; // обновляем input
-            this.processSelectedFile(files[0]);
+            const dt = new DataTransfer();
+            for (const f of files) dt.items.add(f);
+            this.fileInput.files = dt.files;
+            this.processSelectedFiles(files);
         }
     }
     
-    processSelectedFile(file) {
+    processSelectedFiles(files) {
         const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
         const allowedExtensions = ['.pdf', '.jpg', '.jpeg', '.png'];
-        const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
-        
-        if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(fileExtension)) {
+        const valid = [];
+        for (const f of files) {
+            const ext = '.' + f.name.split('.').pop().toLowerCase();
+            if (allowedTypes.includes(f.type) || allowedExtensions.includes(ext)) {
+                valid.push(f);
+            }
+        }
+        if (valid.length === 0) {
             this.showError('Неподдерживаемый тип файла. Разрешены только PDF, JPG и PNG');
             return;
         }
-        
-        this.selectedFile = file;
-        this.updateFilePreview(file);
+        this.selectedFiles = valid;
+        this.updateFilePreview(valid[0], valid.length);
 
-        // Показать красивую строку выбранного файла
         const selectedRow = document.getElementById('selectedFile');
         const nameEl = document.getElementById('selectedFileName');
         if (selectedRow && nameEl) {
-            nameEl.textContent = file.name;
+            nameEl.textContent = valid.length === 1 ? valid[0].name : `${valid.length} файла(ов) выбрано`;
             selectedRow.hidden = false;
         }
     }
     
-    updateFilePreview(file) {
+    updateFilePreview(file, count = 1) {
         const icon = this.getFileIcon(file.name);
-        this.fileNameSpan.textContent = `${icon} ${file.name}`;
+        this.fileNameSpan.textContent = count === 1 ? `${icon} ${file.name}` : `${count} файлов выбрано`;
         
     }
     
     clearSelectedFile() {
-        this.selectedFile = null;
+        this.selectedFiles = [];
         this.fileInput.value = '';
         this.fileNameSpan.textContent = 'Файл не выбран';
         const selectedRow = document.getElementById('selectedFile');
@@ -504,6 +682,26 @@ class DocumentAIApp {
         if (parts.length === 0) return;
         parts.forEach(p => this.addColumn(p));
         this.columnsInput.value = '';
+    }
+
+    // На лету: создаём чипы, когда пользователь вводит запятую/точку с запятой
+    handleColumnsTyping() {
+        if (!this.columnsInput) return;
+        const raw = this.columnsInput.value || '';
+        if (!raw) return;
+        const endsWithSep = /[,;]\s*$/.test(raw);
+        const tokens = raw.split(/[,;]+/).map(s => this.normalizeColumn(s)).filter(Boolean);
+        if (tokens.length === 0) return;
+        // Если нет завершающего разделителя — последний фрагмент считаем незавершённым
+        let remainder = '';
+        let toAdd = tokens;
+        if (!endsWithSep) {
+            remainder = toAdd.pop() || '';
+        }
+        if (toAdd.length > 0) {
+            toAdd.forEach((t) => this.addColumn(t));
+        }
+        this.columnsInput.value = remainder;
     }
 
     normalizeColumn(value) {

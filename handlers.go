@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -81,6 +82,16 @@ func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 	// Считываем список колонок 1С (через запятую)
 	columns1c := strings.TrimSpace(r.FormValue("columns1c"))
 
+	// Параметры батча (необязательные)
+	batchID := strings.TrimSpace(r.FormValue("batchId"))
+	seqStr := strings.TrimSpace(r.FormValue("seq"))
+	seq := 0
+	if seqStr != "" {
+		if v, err := strconv.Atoi(seqStr); err == nil {
+			seq = v
+		}
+	}
+
 	file, header, err := r.FormFile("file")
 	if err != nil {
 		sendJSONError(w, "Не удалось получить файл: "+err.Error(), http.StatusBadRequest)
@@ -93,7 +104,7 @@ func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := sendToN8n(message, file, header.Filename, outputFormat, columns1c); err != nil {
+	if err := sendToN8n(message, file, header.Filename, outputFormat, columns1c, batchID, seq); err != nil {
 		log.Printf("ERROR: Ошибка отправки в n8n: %v", err)
 		sendJSONError(w, "Не удалось обработать документ: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -152,6 +163,13 @@ func handleN8nWebhook(w http.ResponseWriter, r *http.Request) {
 		if baseName == "" {
 			baseName = strings.TrimSpace(r.FormValue("fileName"))
 		}
+		// Если baseName уже содержит расширение, совпадающее с ext — уберём его, чтобы не дублировать
+		if baseName != "" {
+			bl := strings.ToLower(baseName)
+			if ext != "" && strings.HasSuffix(bl, ext) {
+				baseName = baseName[:len(baseName)-len(ext)]
+			}
+		}
 		if baseName == "" {
 			baseName = strings.TrimSuffix(header.Filename, ext)
 		}
@@ -193,6 +211,16 @@ func handleN8nWebhook(w http.ResponseWriter, r *http.Request) {
 			Timestamp: time.Now(),
 			Status:    "completed",
 			Download:  "/download?name=" + filepath.Base(savePath),
+		}
+
+		// Проксируем batchId/seq, если передал n8n
+		if bid := strings.TrimSpace(r.FormValue("batchId")); bid != "" {
+			resp.BatchID = bid
+		}
+		if seqStr := strings.TrimSpace(r.FormValue("seq")); seqStr != "" {
+			if v, err := strconv.Atoi(seqStr); err == nil {
+				resp.Seq = v
+			}
 		}
 
 		responsesMutex.Lock()
@@ -310,6 +338,19 @@ func handleN8nWebhook(w http.ResponseWriter, r *http.Request) {
 		Text:      responseText,
 		Timestamp: time.Now(),
 		Status:    status,
+	}
+
+	// Проксируем batchId/seq из JSON, если есть
+	if bid, ok := webhookData["batchId"].(string); ok && strings.TrimSpace(bid) != "" {
+		response.BatchID = strings.TrimSpace(bid)
+	}
+	// seq может прийти как float64 из JSON
+	if s, ok := webhookData["seq"].(float64); ok {
+		response.Seq = int(s)
+	} else if s2, ok := webhookData["seq"].(string); ok {
+		if v, err := strconv.Atoi(strings.TrimSpace(s2)); err == nil {
+			response.Seq = v
+		}
 	}
 
 	responsesMutex.Lock()
@@ -498,7 +539,7 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func sendToN8n(message string, file multipart.File, fileName string, outputFormat string, columns1c string) error {
+func sendToN8n(message string, file multipart.File, fileName string, outputFormat string, columns1c string, batchID string, seq int) error {
 	var buffer bytes.Buffer
 	writer := multipart.NewWriter(&buffer)
 
@@ -527,6 +568,18 @@ func sendToN8n(message string, file multipart.File, fileName string, outputForma
 
 	if err := writer.WriteField("executionMode", "production"); err != nil {
 		return fmt.Errorf("не удалось добавить режим выполнения: %w", err)
+	}
+
+	// Проксируем информацию о батче, если есть
+	if strings.TrimSpace(batchID) != "" {
+		if err := writer.WriteField("batchId", batchID); err != nil {
+			return fmt.Errorf("не удалось добавить batchId: %w", err)
+		}
+	}
+	if seq > 0 {
+		if err := writer.WriteField("seq", fmt.Sprintf("%d", seq)); err != nil {
+			return fmt.Errorf("не удалось добавить seq: %w", err)
+		}
 	}
 
 	if seeker, ok := file.(io.Seeker); ok {

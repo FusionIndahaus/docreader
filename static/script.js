@@ -376,60 +376,31 @@ class DocumentAIApp {
     }
 
     mergeCsvTexts(csvTexts) {
-        const canonical = ['date', 'name', 'amount'];
-        const outRows = [];
+        const userColumns = (this.columns || []).map((c) => String(c || '').trim()).filter((c) => c.length > 0);
+        let headerOut = null;
+        const dataLines = [];
 
         for (let i = 0; i < csvTexts.length; i++) {
             const raw = (csvTexts[i] || '').replace(/^\uFEFF/, '');
             const lines = raw.split(/\r?\n/).filter(l => l.length > 0);
             if (lines.length === 0) continue;
 
-            // 1) Разобрать и нормализовать заголовок файла
-            const headerColsRaw = this.splitCsvLine(lines[0] || '');
-            const normalizedHeader = headerColsRaw.map((c) => this.normalizeHeaderValue(String(c || '')));
+            // Инициализируем шапку
+            if (!headerOut) {
+                if (userColumns.length > 0) {
+                    headerOut = userColumns.map(this.escapeCsv).join(',');
+                } else {
+                    headerOut = lines[0];
+                }
+            }
 
-            // Построить маппинг canonical -> индекс во входном файле
-            const colIndexByCanonical = {};
-            canonical.forEach((col) => {
-                const idx = normalizedHeader.indexOf(col);
-                colIndexByCanonical[col] = idx; // -1 если нет
-            });
-
-            // 2) Преобразовать строки данных в порядок canonical
             for (let li = 1; li < lines.length; li++) {
-                const values = this.splitCsvLine(lines[li]);
-                const out = canonical.map((col) => {
-                    const idx = colIndexByCanonical[col];
-                    return idx >= 0 && idx < values.length ? String(values[idx] ?? '') : '';
-                });
-                outRows.push(out.map(this.escapeCsv).join(','));
+                dataLines.push(lines[li]);
             }
         }
 
-        // Возвращаем единый заголовок + все строки
-        const header = canonical.join(',');
-        return [header, ...outRows].join('\n');
-    }
-
-    // Нормализация названий колонок к каноническим именам
-    normalizeHeaderValue(name) {
-        const n = String(name).trim().replace(/^"|"$/g, '').toLowerCase();
-        switch (n) {
-            case 'дата':
-            case 'date':
-                return 'date';
-            case 'имя':
-            case 'фио':
-            case 'name':
-            case 'names':
-                return 'name';
-            case 'сумма':
-            case 'sum':
-            case 'amount':
-                return 'amount';
-            default:
-                return n;
-        }
+        if (!headerOut) return dataLines.join('\n');
+        return [headerOut, ...dataLines].join('\n');
     }
 
     // Разбивает CSV-строку по запятым с учётом кавычек

@@ -1034,8 +1034,7 @@ footer:before {
 
 /* Progress Bar Styles */
 .progress-section {
-    margin-bottom: 30px;
-    animation: fadeIn 0.6s ease-out;
+    animation: fadeIn 0.8s ease-out;
 }
 
 .progress-header {
@@ -1267,4 +1266,4 @@ footer:before {
 [data-theme="dark"] .chip-label { color: #dae0ff; }
 [data-theme="dark"] .chip-remove { color: #aab2d5; border-color: rgba(255,255,255,0.12); }
 [data-theme="dark"] #columns1cInput { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); color: #e9edff; border-radius: 12px; }
-[data-theme="dark"] #columns1cInput:focus { border-color: #6ea8ff; box-shadow: 0 0 0 4px rgba(110,168,255,0.18); } */
+[data-theme="dark"] #columns1cInput:focus { border-color: #6ea8ff; box-shadow: 0 0 0 4px rgba(110,168,255,0.18); }

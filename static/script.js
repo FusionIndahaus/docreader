@@ -9,6 +9,13 @@ class DocumentAIApp {
         this.refreshBtn = document.getElementById('refreshBtn');
         this.responseList = document.getElementById('responseList');
         
+        // Progress bar elements
+        this.progressSection = document.getElementById('progressSection');
+        this.progressText = document.getElementById('progressText');
+        this.progressFill = document.getElementById('progressFill');
+        this.progressPercent = document.getElementById('progressPercent');
+        this.fileList = document.getElementById('fileList');
+        
         // Колонки 1С
         this.columnsInput = document.getElementById('columns1cInput');
         this.columnsChips = document.getElementById('columns1cChips');
@@ -19,6 +26,7 @@ class DocumentAIApp {
         this.selectedFiles = [];
         this.results = [];
         this.activeBatch = null; // { id, expected, format, received, downloads: [], responses: [] }
+        this.fileStatuses = new Map(); // { fileName: { status: 'waiting'|'processing'|'completed'|'error', seq: number } }
         
         this.init();
     }
@@ -113,6 +121,13 @@ class DocumentAIApp {
                             this.activeBatch.received += 1;
                             if (payload.download) this.activeBatch.downloads.push(payload.download);
                             this.activeBatch.responses.push(payload);
+                            
+                            // Отмечаем файл как завершенный
+                            if (payload.seq && this.selectedFiles && this.selectedFiles[payload.seq - 1]) {
+                                const fileName = this.selectedFiles[payload.seq - 1].name;
+                                this.markFileAsCompleted(fileName);
+                            }
+                            
                             if (this.activeBatch.received >= this.activeBatch.expected) {
                                 const batch = this.activeBatch;
                                 this.activeBatch = null;
@@ -243,6 +258,19 @@ class DocumentAIApp {
                 responses: []
             };
 
+            // Инициализируем статусы файлов
+            this.fileStatuses.clear();
+            this.selectedFiles.forEach((file, index) => {
+                this.fileStatuses.set(file.name, {
+                    status: 'waiting',
+                    seq: index + 1,
+                    file: file
+                });
+            });
+
+            // Показываем progress bar
+            this.showProgressBar();
+
             await this.uploadBatchSequentially(batchId, this.selectedFiles, selectedFormat, (this.columns || []).join(','));
             // Завершение произойдет по SSE в handleBatchCompleted
             
@@ -258,6 +286,10 @@ class DocumentAIApp {
     async uploadBatchSequentially(batchId, files, selectedFormat, columns1cStr) {
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
+            
+            // Отмечаем файл как обрабатываемый
+            this.markFileAsProcessing(file.name);
+            
             const formData = new FormData();
             formData.append('message', document.getElementById('message').value.trim());
             formData.append('file', file);
@@ -266,10 +298,16 @@ class DocumentAIApp {
             formData.append('batchId', batchId);
             formData.append('seq', String(i + 1));
 
-            const response = await fetch('/upload', { method: 'POST', body: formData });
-            const result = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                throw new Error(result?.message || `Ошибка сервера: ${response.status}`);
+            try {
+                const response = await fetch('/upload', { method: 'POST', body: formData });
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(result?.message || `Ошибка сервера: ${response.status}`);
+                }
+            } catch (error) {
+                // Отмечаем файл как ошибочный при ошибке загрузки
+                this.markFileAsError(file.name);
+                throw error;
             }
         }
     }
@@ -358,6 +396,7 @@ class DocumentAIApp {
             this.renderResults(this.results);
 
             this.clearForm();
+            this.hideProgressBar();
             setTimeout(() => this.loadExistingResults(), 1000);
         } catch (e) {
             this.showError('Ошибка при объединении результатов');
@@ -728,6 +767,103 @@ class DocumentAIApp {
 
     escapeAttr(str) {
         return this.escapeHTML(str);
+    }
+
+    // ===== Progress Bar Methods =====
+    showProgressBar() {
+        if (this.progressSection) {
+            this.progressSection.style.display = 'block';
+            this.updateProgressBar();
+            this.renderFileList();
+        }
+    }
+
+    hideProgressBar() {
+        if (this.progressSection) {
+            this.progressSection.style.display = 'none';
+        }
+    }
+
+    updateProgressBar() {
+        if (!this.activeBatch) return;
+
+        const completed = this.activeBatch.received;
+        const total = this.activeBatch.expected;
+        const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+        if (this.progressText) {
+            this.progressText.textContent = `${completed} из ${total} файлов обработано`;
+        }
+
+        if (this.progressFill) {
+            this.progressFill.style.width = `${percentage}%`;
+        }
+
+        if (this.progressPercent) {
+            this.progressPercent.textContent = `${percentage}%`;
+        }
+    }
+
+    renderFileList() {
+        if (!this.fileList) return;
+
+        const files = Array.from(this.fileStatuses.values());
+        this.fileList.innerHTML = files.map(fileInfo => {
+            const status = fileInfo.status;
+            const fileName = fileInfo.file.name;
+            const fileIcon = this.getFileIcon(fileName);
+            
+            let statusText = '';
+            let progressIcon = '';
+            
+            switch (status) {
+                case 'waiting':
+                    statusText = 'Ожидание';
+                    progressIcon = '<div class="file-progress"><div class="spinner"></div></div>';
+                    break;
+                case 'processing':
+                    statusText = 'Обработка';
+                    progressIcon = '<div class="file-progress"><div class="spinner"></div></div>';
+                    break;
+                case 'completed':
+                    statusText = 'Готово';
+                    progressIcon = '<div class="file-progress"><div class="checkmark">✓</div></div>';
+                    break;
+                case 'error':
+                    statusText = 'Ошибка';
+                    progressIcon = '<div class="file-progress"><div class="error-mark">✕</div></div>';
+                    break;
+            }
+
+            return `
+                <div class="file-item ${status}">
+                    <div class="file-icon">${fileIcon}</div>
+                    <div class="file-name">${this.escapeHTML(fileName)}</div>
+                    <div class="file-status ${status}">${statusText}</div>
+                    ${progressIcon}
+                </div>
+            `;
+        }).join('');
+    }
+
+    updateFileStatus(fileName, status) {
+        if (this.fileStatuses.has(fileName)) {
+            this.fileStatuses.get(fileName).status = status;
+            this.updateProgressBar();
+            this.renderFileList();
+        }
+    }
+
+    markFileAsProcessing(fileName) {
+        this.updateFileStatus(fileName, 'processing');
+    }
+
+    markFileAsCompleted(fileName) {
+        this.updateFileStatus(fileName, 'completed');
+    }
+
+    markFileAsError(fileName) {
+        this.updateFileStatus(fileName, 'error');
     }
 }
 

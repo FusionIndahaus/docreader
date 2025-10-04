@@ -1234,8 +1234,8 @@ footer:before {
     100% { transform: rotate(360deg); }
 }
 
-/* Chips for 1C columns */
-.chips-container { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+/* Chips for 1C columns - ЗАКОММЕНТИРОВАНО */
+/* .chips-container { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .chip {
     display: inline-flex;
     align-items: center;
@@ -1267,4 +1267,4 @@ footer:before {
 [data-theme="dark"] .chip-label { color: #dae0ff; }
 [data-theme="dark"] .chip-remove { color: #aab2d5; border-color: rgba(255,255,255,0.12); }
 [data-theme="dark"] #columns1cInput { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); color: #e9edff; border-radius: 12px; }
-[data-theme="dark"] #columns1cInput:focus { border-color: #6ea8ff; box-shadow: 0 0 0 4px rgba(110,168,255,0.18); }
+[data-theme="dark"] #columns1cInput:focus { border-color: #6ea8ff; box-shadow: 0 0 0 4px rgba(110,168,255,0.18); } */

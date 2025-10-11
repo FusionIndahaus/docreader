@@ -9,16 +9,24 @@ class DocumentAIApp {
         this.refreshBtn = document.getElementById('refreshBtn');
         this.responseList = document.getElementById('responseList');
         
-        // Колонки 1С
-        this.columnsInput = document.getElementById('columns1cInput');
-        this.columnsChips = document.getElementById('columns1cChips');
-        this.columnsHidden = document.getElementById('columns1c');
-        this.columns = [];
+        // Progress bar elements
+        this.progressSection = document.getElementById('progressSection');
+        this.progressText = document.getElementById('progressText');
+        this.progressFill = document.getElementById('progressFill');
+        this.progressPercent = document.getElementById('progressPercent');
+        this.fileList = document.getElementById('fileList');
+        
+        // Колонки 1С - ЗАКОММЕНТИРОВАНО
+        // this.columnsInput = document.getElementById('columns1cInput');
+        // this.columnsChips = document.getElementById('columns1cChips');
+        // this.columnsHidden = document.getElementById('columns1c');
+        // this.columns = [];
         
         this.isUploading = false;
         this.selectedFiles = [];
         this.results = [];
         this.activeBatch = null; // { id, expected, format, received, downloads: [], responses: [] }
+        this.fileStatuses = new Map(); // { fileName: { status: 'waiting'|'processing'|'completed'|'error', seq: number } }
         
         this.init();
     }
@@ -53,31 +61,31 @@ class DocumentAIApp {
             }
         });
         
-        // Обработка ввода колонок 1С
-        if (this.columnsInput) {
-            this.columnsInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    this.tryAddColumnsFromInput();
-                }
-            });
-            // Разбиваем на лету по запятым/точкам с запятой
-            this.columnsInput.addEventListener('input', (e) => {
-                this.handleColumnsTyping(e);
-            });
-            this.columnsInput.addEventListener('blur', () => {
-                // Добавим остаток при уходе фокуса
-                this.tryAddColumnsFromInput();
-            });
-        }
-        if (this.columnsChips) {
-            this.columnsChips.addEventListener('click', (e) => {
-                const btn = e.target.closest('.chip-remove');
-                if (!btn) return;
-                const value = btn.getAttribute('data-value');
-                this.removeColumn(value);
-            });
-        }
+        // Обработка ввода колонок 1С - ЗАКОММЕНТИРОВАНО
+        // if (this.columnsInput) {
+        //     this.columnsInput.addEventListener('keydown', (e) => {
+        //         if (e.key === 'Enter') {
+        //             e.preventDefault();
+        //             this.tryAddColumnsFromInput();
+        //         }
+        //     });
+        //     // Разбиваем на лету по запятым/точкам с запятой
+        //     this.columnsInput.addEventListener('input', (e) => {
+        //         this.handleColumnsTyping(e);
+        //     });
+        //     this.columnsInput.addEventListener('blur', () => {
+        //         // Добавим остаток при уходе фокуса
+        //         this.tryAddColumnsFromInput();
+        //     });
+        // }
+        // if (this.columnsChips) {
+        //     this.columnsChips.addEventListener('click', (e) => {
+        //         const btn = e.target.closest('.chip-remove');
+        //         if (!btn) return;
+        //         const value = btn.getAttribute('data-value');
+        //         this.removeColumn(value);
+        //     });
+        // }
         
     }
 
@@ -113,6 +121,13 @@ class DocumentAIApp {
                             this.activeBatch.received += 1;
                             if (payload.download) this.activeBatch.downloads.push(payload.download);
                             this.activeBatch.responses.push(payload);
+                            
+                            // Отмечаем файл как завершенный
+                            if (payload.seq && this.selectedFiles && this.selectedFiles[payload.seq - 1]) {
+                                const fileName = this.selectedFiles[payload.seq - 1].name;
+                                this.markFileAsCompleted(fileName);
+                            }
+                            
                             if (this.activeBatch.received >= this.activeBatch.expected) {
                                 const batch = this.activeBatch;
                                 this.activeBatch = null;
@@ -142,15 +157,15 @@ class DocumentAIApp {
         }
     }
 
-    // Не скачивать README несколько раз для одного результата
-    triggerReadmeDownloadOnce(id) {
-        if (!this._processedReadmeIds) {
-            this._processedReadmeIds = new Set();
-        }
-        if (this._processedReadmeIds.has(id)) return;
-        this._processedReadmeIds.add(id);
-        this.downloadReadmeForLatestColumns();
-    }
+    // Не скачивать README несколько раз для одного результата - ЗАКОММЕНТИРОВАНО
+    // triggerReadmeDownloadOnce(id) {
+    //     if (!this._processedReadmeIds) {
+    //         this._processedReadmeIds = new Set();
+    //     }
+    //     if (this._processedReadmeIds.has(id)) return;
+    //     this._processedReadmeIds.add(id);
+    //     this.downloadReadmeForLatestColumns();
+    // }
     
     setupDragAndDrop() {
         const dropZone = this.form;
@@ -230,8 +245,8 @@ class DocumentAIApp {
         
         try {
             const selectedFormat = (document.querySelector('input[name="outputFormat"]:checked')?.value || 'csv').toLowerCase();
-            // Сохраним последние колонки локально для README
-            try { localStorage.setItem('columns1c:last', JSON.stringify(this.columns || [])); } catch {}
+            // Сохраним последние колонки локально для README - ЗАКОММЕНТИРОВАНО
+            // try { localStorage.setItem('columns1c:last', JSON.stringify(this.columns || [])); } catch {}
 
             const batchId = this.generateBatchId();
             this.activeBatch = {
@@ -243,7 +258,20 @@ class DocumentAIApp {
                 responses: []
             };
 
-            await this.uploadBatchSequentially(batchId, this.selectedFiles, selectedFormat, (this.columns || []).join(','));
+            // Инициализируем статусы файлов
+            this.fileStatuses.clear();
+            this.selectedFiles.forEach((file, index) => {
+                this.fileStatuses.set(file.name, {
+                    status: 'waiting',
+                    seq: index + 1,
+                    file: file
+                });
+            });
+
+            // Показываем progress bar
+            this.showProgressBar();
+
+            await this.uploadBatchSequentially(batchId, this.selectedFiles, selectedFormat, ''); // (this.columns || []).join(',') - ЗАКОММЕНТИРОВАНО
             // Завершение произойдет по SSE в handleBatchCompleted
             
         } catch (error) {
@@ -258,62 +286,75 @@ class DocumentAIApp {
     async uploadBatchSequentially(batchId, files, selectedFormat, columns1cStr) {
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
+            
+            // Отмечаем файл как обрабатываемый
+            this.markFileAsProcessing(file.name);
+            
             const formData = new FormData();
             formData.append('message', document.getElementById('message').value.trim());
             formData.append('file', file);
             formData.append('outputFormat', selectedFormat);
-            formData.append('columns1c', columns1cStr);
+            // formData.append('columns1c', columns1cStr); // ЗАКОММЕНТИРОВАНО
             formData.append('batchId', batchId);
             formData.append('seq', String(i + 1));
 
-            const response = await fetch('/upload', { method: 'POST', body: formData });
-            const result = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                throw new Error(result?.message || `Ошибка сервера: ${response.status}`);
+            try {
+                const response = await fetch('/upload', { method: 'POST', body: formData });
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(result?.message || `Ошибка сервера: ${response.status}`);
+                }
+            } catch (error) {
+                // Отмечаем файл как ошибочный при ошибке загрузки
+                this.markFileAsError(file.name);
+                throw error;
             }
         }
     }
 
-    downloadReadmeForLatestColumns() {
-        let columns = this.columns;
-        try {
-            if ((!columns || columns.length === 0)) {
-                columns = JSON.parse(localStorage.getItem('columns1c:last') || '[]');
-            }
-        } catch {}
-        const text = this.generateReadmeText(columns || []);
-        this.downloadTextAsFile(text, 'README_1C.txt');
-    }
+    // downloadReadmeForLatestColumns() - ЗАКОММЕНТИРОВАНО
+    // downloadReadmeForLatestColumns() {
+    //     let columns = this.columns;
+    //     try {
+    //         if ((!columns || columns.length === 0)) {
+    //             columns = JSON.parse(localStorage.getItem('columns1c:last') || '[]');
+    //         }
+    //     } catch {}
+    //     const text = this.generateReadmeText(columns || []);
+    //     this.downloadTextAsFile(text, 'README_1C.txt');
+    // }
 
-    generateReadmeText(columns) {
-        const normalized = (columns || [])
-            .map((c) => String(c || '').trim())
-            .filter((c) => c.length > 0);
-        const assignments = normalized.map((col, idx) => {
-            // Формируем безопасный идентификатор свойства 1С (пробелы -> без пробелов)
-            const prop = this.to1CIdentifier(col);
-            return `      НоваяСтрока.${prop} = МассивСлов[${idx}];`;
-        }).join('\n');
+    // generateReadmeText(columns) - ЗАКОММЕНТИРОВАНО
+    // generateReadmeText(columns) {
+    //     const normalized = (columns || [])
+    //         .map((c) => String(c || '').trim())
+    //         .filter((c) => c.length > 0);
+    //     const assignments = normalized.map((col, idx) => {
+    //         // Формируем безопасный идентификатор свойства 1С (пробелы -> без пробелов)
+    //         const prop = this.to1CIdentifier(col);
+    //         return `      НоваяСтрока.${prop} = МассивСлов[${idx}];`;
+    //     }).join('\n');
 
-        const header = `Инструкция по созданию кнопки открытия CSV файла в 1С\n\n` +
-        `1) Зайдите в конфигуратор 1С\n` +
-        `2) Перейдите на форму, где требуется импорт\n` +
-        `3) Создайте кнопки "прочитать файл" и "записать данные"\n` +
-        `4) На кнопке "прочитать файл": выберите действие "Прочитать файл"\n` +
-        `5) Вставьте следующий код:`;
+    //     const header = `Инструкция по созданию кнопки открытия CSV файла в 1С\n\n` +
+    //     `1) Зайдите в конфигуратор 1С\n` +
+    //     `2) Перейдите на форму, где требуется импорт\n` +
+    //     `3) Создайте кнопки "прочитать файл" и "записать данные"\n` +
+    //     `4) На кнопке "прочитать файл": выберите действие "Прочитать файл"\n` +
+    //     `5) Вставьте следующий код:`;
 
-        const code = `\n\n&НаКлиенте\nПроцедура ПутьКФайлуНачалоВыбора(Элемент, ДанныеВыбора, ВыборДобавлением, СтандартнаяОбработка)\n  Проводник = Новый ДиалогВыбораФайла(РежимДиалогаВыбораФайла.Открытие);\n  Проводник.Заголовок = "Выберите файл с компьютера";\n  \n  Если Объект.ФорматФайла = "CSV" Тогда\n    Фильтр = "CSV Файл|*.csv";\n  ИначеЕсли Объект.ФорматФайла = "XLSX" Тогда\n    Фильтр = "XLSX файл|*.xlsx";\n  Иначе\n    Возврат;\n  КонецЕсли;\n  \n  Проводник.Фильтр = Фильтр;\n  \n  Оповещение = Новый ОписаниеОповещения("ПослеВыбораФайла", ЭтотОбъект);\n  Проводник.Показать(Оповещение);  \nКонецПроцедуры\n\n&НаКлиенте\nПроцедура ПослеВыбораФайла(ВыбранныеФайлы, ДополнительныеПараметры) Экспорт\n  Если ВыбранныеФайлы = неопределено Тогда\n    Возврат;\n  КонецЕсли;\n  \n  Объект.ПутьКФайлу = ВыбранныеФайлы[0];\n  \nКонецПроцедуры\n\n\n&НаКлиенте\nПроцедура ПрочитатьФайл(Команда)\n  Объект.ДанныеФайла.Очистить();\n  \n  Если Объект.ФорматФайла = "CSV" Тогда\n    ПрочитатьФайлCSV();  \n  КонецЕсли;\nКонецПроцедуры \n\n &НаКлиенте\nПроцедура ПрочитатьФайлCSV()\n ПоследовательноеЧтение = Истина;\n  Если ПоследовательноеЧтение Тогда\n    \n    Текст = Новый ЧтениеТекста;\n    Текст.Открыть(Объект.ПутьКФайлу);\n    \n    ТекСтрока = Текст.ПрочитатьСтроку();\n    Пока ТекСтрока <> Неопределено Цикл\n      \n      МассивСлов = СтрРазделить(ТекСтрока, ",");\n      Если МассивСлов.Количество() < ${Math.max(1, normalized.length)} Тогда\n        Продолжить;\n      КонецЕсли;\n      \n      НоваяСтрока = Объект.ДанныеФайла.Добавить();\n${assignments || '      // Добавьте присвоения полей в соответствии с вашими колонками'}\n      \n      ТекСтрока = Текст.ПрочитатьСтроку();\n      \n    КонецЦикла;\n  Иначе\n    Текст = Новый ТекстовыйДокумент;\n    Текст.Прочитать(Объект.ПутьКФайлу);\n    Для НомерСтроки=1 По Текст.КоличествоСтрок() Цикл\n      \n      ТекСтрока = Текст.ПолучитьСтроку(НомерСтроки);\n      МассивСлов = СтрРазделить(ТекСтрока, ",");\n      Если МассивСлов.Количество() < ${Math.max(1, normalized.length)} Тогда\n        Продолжить;\n      КонецЕсли;\n      \n      НоваяСтрока = Объект.ДанныеФайла.Добавить();\n${assignments || '      // Добавьте присвоения полей в соответствии с вашими колонками'}\n      \n    КонецЦикла;\n  КонецЕсли;\nКонецПроцедуры`;
+    //     const code = `\n\n&НаКлиенте\nПроцедура ПутьКФайлуНачалоВыбора(Элемент, ДанныеВыбора, ВыборДобавлением, СтандартнаяОбработка)\n  Проводник = Новый ДиалогВыбораФайла(РежимДиалогаВыбораФайла.Открытие);\n  Проводник.Заголовок = "Выберите файл с компьютера";\n  \n  Если Объект.ФорматФайла = "CSV" Тогда\n    Фильтр = "CSV Файл|*.csv";\n  ИначеЕсли Объект.ФорматФайла = "XLSX" Тогда\n    Фильтр = "XLSX файл|*.xlsx";\n  Иначе\n    Возврат;\n  КонецЕсли;\n  \n  Проводник.Фильтр = Фильтр;\n  \n  Оповещение = Новый ОписаниеОповещения("ПослеВыбораФайла", ЭтотОбъект);\n  Проводник.Показать(Оповещение);  \nКонецПроцедуры\n\n&НаКлиенте\nПроцедура ПослеВыбораФайла(ВыбранныеФайлы, ДополнительныеПараметры) Экспорт\n  Если ВыбранныеФайлы = неопределено Тогда\n    Возврат;\n  КонецЕсли;\n  \n  Объект.ПутьКФайлу = ВыбранныеФайлы[0];\n  \nКонецПроцедуры\n\n\n&НаКлиенте\nПроцедура ПрочитатьФайл(Команда)\n  Объект.ДанныеФайла.Очистить();\n  \n  Если Объект.ФорматФайла = "CSV" Тогда\n    ПрочитатьФайлCSV();  \n  КонецЕсли;\nКонецПроцедуры \n\n &НаКлиенте\nПроцедура ПрочитатьФайлCSV()\n ПоследовательноеЧтение = Истина;\n  Если ПоследовательноеЧтение Тогда\n    \n    Текст = Новый ЧтениеТекста;\n    Текст.Открыть(Объект.ПутьКФайлу);\n    \n    ТекСтрока = Текст.ПрочитатьСтроку();\n    Пока ТекСтрока <> Неопределено Цикл\n      \n      МассивСлов = СтрРазделить(ТекСтрока, ",");\n      Если МассивСлов.Количество() < ${Math.max(1, normalized.length)} Тогда\n        Продолжить;\n      КонецЕсли;\n      \n      НоваяСтрока = Объект.ДанныеФайла.Добавить();\n${assignments || '      // Добавьте присвоения полей в соответствии с вашими колонками'}\n      \n      ТекСтрока = Текст.ПрочитатьСтроку();\n      \n    КонецЦикла;\n  Иначе\n    Текст = Новый ТекстовыйДокумент;\n    Текст.Прочитать(Объект.ПутьКФайлу);\n    Для НомерСтроки=1 По Текст.КоличествоСтрок() Цикл\n      \n      ТекСтрока = Текст.ПолучитьСтроку(НомерСтроки);\n      МассивСлов = СтрРазделить(ТекСтрока, ",");\n      Если МассивСлов.Количество() < ${Math.max(1, normalized.length)} Тогда\n        Продолжить;\n      КонецЕсли;\n      \n      НоваяСтрока = Объект.ДанныеФайла.Добавить();\n${assignments || '      // Добавьте присвоения полей в соответствии с вашими колонками'}\n      \n    КонецЦикла;\n  КонецЕсли;\nКонецПроцедуры`;
 
-        return header + code + '\n';
-    }
+    //     return header + code + '\n';
+    // }
 
-    to1CIdentifier(name) {
-        // Убираем недопустимые символы, делаем ПаскальКейс
-        const cleaned = String(name).replace(/[^\p{L}\p{N}_\s]/gu, ' ').trim();
-        if (!cleaned) return 'Поле';
-        const parts = cleaned.split(/\s+/).map(p => p.charAt(0).toUpperCase() + p.slice(1));
-        return parts.join('');
-    }
+    // to1CIdentifier(name) - ЗАКОММЕНТИРОВАНО
+    // to1CIdentifier(name) {
+    //     // Убираем недопустимые символы, делаем ПаскальКейс
+    //     const cleaned = String(name).replace(/[^\p{L}\p{N}_\s]/gu, ' ').trim();
+    //     if (!cleaned) return 'Поле';
+    //     const parts = cleaned.split(/\s+/).map(p => p.charAt(0).toUpperCase() + p.slice(1));
+    //     return parts.join('');
+    // }
 
     downloadTextAsFile(text, fileName) {
         try {
@@ -338,13 +379,13 @@ class DocumentAIApp {
                 const merged = await this.mergeCsvDownloads(batch.downloads);
                 const outName = `merged_${batch.id}.csv`;
                 this.downloadTextAsFile(merged, outName);
-                this.triggerReadmeDownloadOnce(batch.id);
+                // this.triggerReadmeDownloadOnce(batch.id); // ЗАКОММЕНТИРОВАНО
                 this.showSuccess(`Готово: объединено ${batch.downloads.length} CSV-файлов`);
             } else {
                 for (const url of batch.downloads) {
                     this.triggerDownload(url);
                 }
-                this.triggerReadmeDownloadOnce(batch.id);
+                // this.triggerReadmeDownloadOnce(batch.id); // ЗАКОММЕНТИРОВАНО
                 this.showSuccess(`Готово: обработано ${batch.downloads.length} файл(ов)`);
             }
 
@@ -358,6 +399,7 @@ class DocumentAIApp {
             this.renderResults(this.results);
 
             this.clearForm();
+            this.hideProgressBar();
             setTimeout(() => this.loadExistingResults(), 1000);
         } catch (e) {
             this.showError('Ошибка при объединении результатов');
@@ -376,60 +418,31 @@ class DocumentAIApp {
     }
 
     mergeCsvTexts(csvTexts) {
-        const canonical = ['date', 'name', 'amount'];
-        const outRows = [];
+        // const userColumns = (this.columns || []).map((c) => String(c || '').trim()).filter((c) => c.length > 0); // ЗАКОММЕНТИРОВАНО
+        let headerOut = null;
+        const dataLines = [];
 
         for (let i = 0; i < csvTexts.length; i++) {
             const raw = (csvTexts[i] || '').replace(/^\uFEFF/, '');
             const lines = raw.split(/\r?\n/).filter(l => l.length > 0);
             if (lines.length === 0) continue;
 
-            // 1) Разобрать и нормализовать заголовок файла
-            const headerColsRaw = this.splitCsvLine(lines[0] || '');
-            const normalizedHeader = headerColsRaw.map((c) => this.normalizeHeaderValue(String(c || '')));
+            // Инициализируем шапку
+            if (!headerOut) {
+                // if (userColumns.length > 0) {
+                //     headerOut = userColumns.map(this.escapeCsv).join(',');
+                // } else {
+                    headerOut = lines[0];
+                // }
+            }
 
-            // Построить маппинг canonical -> индекс во входном файле
-            const colIndexByCanonical = {};
-            canonical.forEach((col) => {
-                const idx = normalizedHeader.indexOf(col);
-                colIndexByCanonical[col] = idx; // -1 если нет
-            });
-
-            // 2) Преобразовать строки данных в порядок canonical
             for (let li = 1; li < lines.length; li++) {
-                const values = this.splitCsvLine(lines[li]);
-                const out = canonical.map((col) => {
-                    const idx = colIndexByCanonical[col];
-                    return idx >= 0 && idx < values.length ? String(values[idx] ?? '') : '';
-                });
-                outRows.push(out.map(this.escapeCsv).join(','));
+                dataLines.push(lines[li]);
             }
         }
 
-        // Возвращаем единый заголовок + все строки
-        const header = canonical.join(',');
-        return [header, ...outRows].join('\n');
-    }
-
-    // Нормализация названий колонок к каноническим именам
-    normalizeHeaderValue(name) {
-        const n = String(name).trim().replace(/^"|"$/g, '').toLowerCase();
-        switch (n) {
-            case 'дата':
-            case 'date':
-                return 'date';
-            case 'имя':
-            case 'фио':
-            case 'name':
-            case 'names':
-                return 'name';
-            case 'сумма':
-            case 'sum':
-            case 'amount':
-                return 'amount';
-            default:
-                return n;
-        }
+        if (!headerOut) return dataLines.join('\n');
+        return [headerOut, ...dataLines].join('\n');
     }
 
     // Разбивает CSV-строку по запятым с учётом кавычек
@@ -604,11 +617,11 @@ class DocumentAIApp {
     clearForm() {
         document.getElementById('message').value = '';
         this.clearSelectedFile();
-        // Очистка колонок 1С
-        this.columns = [];
-        if (this.columnsChips) this.columnsChips.innerHTML = '';
-        if (this.columnsHidden) this.columnsHidden.value = '';
-        if (this.columnsInput) this.columnsInput.value = '';
+        // Очистка колонок 1С - ЗАКОММЕНТИРОВАНО
+        // this.columns = [];
+        // if (this.columnsChips) this.columnsChips.innerHTML = '';
+        // if (this.columnsHidden) this.columnsHidden.value = '';
+        // if (this.columnsInput) this.columnsInput.value = '';
     }
     
     setLoadingState(isLoading) {
@@ -673,83 +686,83 @@ class DocumentAIApp {
         });
     }
 
-    // ===== Колонки 1С =====
-    tryAddColumnsFromInput() {
-        if (!this.columnsInput) return;
-        const raw = this.columnsInput.value;
-        if (!raw) return;
-        const parts = raw.split(/[,;\n]+/).map(s => this.normalizeColumn(s)).filter(Boolean);
-        if (parts.length === 0) return;
-        parts.forEach(p => this.addColumn(p));
-        this.columnsInput.value = '';
-    }
+    // ===== Колонки 1С - ЗАКОММЕНТИРОВАНО =====
+    // tryAddColumnsFromInput() {
+    //     if (!this.columnsInput) return;
+    //     const raw = this.columnsInput.value;
+    //     if (!raw) return;
+    //     const parts = raw.split(/[,;\n]+/).map(s => this.normalizeColumn(s)).filter(Boolean);
+    //     if (parts.length === 0) return;
+    //     parts.forEach(p => this.addColumn(p));
+    //     this.columnsInput.value = '';
+    // }
 
-    // На лету: создаём чипы, когда пользователь вводит запятую/точку с запятой
-    handleColumnsTyping() {
-        if (!this.columnsInput) return;
-        const raw = this.columnsInput.value || '';
-        if (!raw) return;
-        const endsWithSep = /[,;]\s*$/.test(raw);
-        const tokens = raw.split(/[,;]+/).map(s => this.normalizeColumn(s)).filter(Boolean);
-        if (tokens.length === 0) return;
-        // Если нет завершающего разделителя — последний фрагмент считаем незавершённым
-        let remainder = '';
-        let toAdd = tokens;
-        if (!endsWithSep) {
-            remainder = toAdd.pop() || '';
-        }
-        if (toAdd.length > 0) {
-            toAdd.forEach((t) => this.addColumn(t));
-        }
-        this.columnsInput.value = remainder;
-    }
+    // // На лету: создаём чипы, когда пользователь вводит запятую/точку с запятой
+    // handleColumnsTyping() {
+    //     if (!this.columnsInput) return;
+    //     const raw = this.columnsInput.value || '';
+    //     if (!raw) return;
+    //     const endsWithSep = /[,;]\s*$/.test(raw);
+    //     const tokens = raw.split(/[,;]+/).map(s => this.normalizeColumn(s)).filter(Boolean);
+    //     if (tokens.length === 0) return;
+    //     // Если нет завершающего разделителя — последний фрагмент считаем незавершённым
+    //     let remainder = '';
+    //     let toAdd = tokens;
+    //     if (!endsWithSep) {
+    //         remainder = toAdd.pop() || '';
+    //     }
+    //     if (toAdd.length > 0) {
+    //         toAdd.forEach((t) => this.addColumn(t));
+    //     }
+    //     this.columnsInput.value = remainder;
+    // }
 
-    normalizeColumn(value) {
-        if (!value) return '';
-        const trimmed = value.trim();
-        if (!trimmed) return '';
-        // Ограничим длину и уберём лишние пробелы внутри
-        const compact = trimmed.replace(/\s+/g, ' ');
-        return compact.slice(0, 64);
-    }
+    // normalizeColumn(value) {
+    //     if (!value) return '';
+    //     const trimmed = value.trim();
+    //     if (!trimmed) return '';
+    //     // Ограничим длину и уберём лишние пробелы внутри
+    //     const compact = trimmed.replace(/\s+/g, ' ');
+    //     return compact.slice(0, 64);
+    // }
 
-    addColumn(value) {
-        if (!value) return;
-        // без дубликатов (регистр не учитываем)
-        const exists = this.columns.find(c => c.toLowerCase() === value.toLowerCase());
-        if (exists) return;
-        this.columns.push(value);
-        this.renderColumnChip(value);
-        this.syncHiddenColumns();
-    }
+    // addColumn(value) {
+    //     if (!value) return;
+    //     // без дубликатов (регистр не учитываем)
+    //     const exists = this.columns.find(c => c.toLowerCase() === value.toLowerCase());
+    //     if (exists) return;
+    //     this.columns.push(value);
+    //     this.renderColumnChip(value);
+    //     this.syncHiddenColumns();
+    // }
 
-    removeColumn(value) {
-        this.columns = this.columns.filter(c => c.toLowerCase() !== String(value || '').toLowerCase());
-        // убрать чип из DOM
-        const chip = this.columnsChips?.querySelector(`.chip[data-value="${CSS.escape(String(value))}"]`);
-        if (chip && chip.parentElement) {
-            chip.parentElement.removeChild(chip);
-        }
-        this.syncHiddenColumns();
-    }
+    // removeColumn(value) {
+    //     this.columns = this.columns.filter(c => c.toLowerCase() !== String(value || '').toLowerCase());
+    //     // убрать чип из DOM
+    //     const chip = this.columnsChips?.querySelector(`.chip[data-value="${CSS.escape(String(value))}"]`);
+    //     if (chip && chip.parentElement) {
+    //         chip.parentElement.removeChild(chip);
+    //     }
+    //     this.syncHiddenColumns();
+    // }
 
-    renderColumnChip(value) {
-        if (!this.columnsChips) return;
-        const chip = document.createElement('div');
-        chip.className = 'chip';
-        chip.setAttribute('data-value', value);
-        chip.innerHTML = `
-            <span class="chip-label">${this.escapeHTML(value)}</span>
-            <button type="button" class="chip-remove" data-value="${this.escapeAttr(value)}" aria-label="Убрать ${this.escapeAttr(value)}">✕</button>
-        `;
-        this.columnsChips.appendChild(chip);
-    }
+    // renderColumnChip(value) {
+    //     if (!this.columnsChips) return;
+    //     const chip = document.createElement('div');
+    //     chip.className = 'chip';
+    //     chip.setAttribute('data-value', value);
+    //     chip.innerHTML = `
+    //         <span class="chip-label">${this.escapeHTML(value)}</span>
+    //         <button type="button" class="chip-remove" data-value="${this.escapeAttr(value)}" aria-label="Убрать ${this.escapeAttr(value)}">✕</button>
+    //     `;
+    //     this.columnsChips.appendChild(chip);
+    // }
 
-    syncHiddenColumns() {
-        if (this.columnsHidden) {
-            this.columnsHidden.value = (this.columns || []).join(',');
-        }
-    }
+    // syncHiddenColumns() {
+    //     if (this.columnsHidden) {
+    //         this.columnsHidden.value = (this.columns || []).join(',');
+    //     }
+    // }
 
     escapeHTML(str) {
         return String(str).replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m]));
@@ -757,6 +770,103 @@ class DocumentAIApp {
 
     escapeAttr(str) {
         return this.escapeHTML(str);
+    }
+
+    // ===== Progress Bar Methods =====
+    showProgressBar() {
+        if (this.progressSection) {
+            this.progressSection.style.display = 'block';
+            this.updateProgressBar();
+            this.renderFileList();
+        }
+    }
+
+    hideProgressBar() {
+        if (this.progressSection) {
+            this.progressSection.style.display = 'none';
+        }
+    }
+
+    updateProgressBar() {
+        if (!this.activeBatch) return;
+
+        const completed = this.activeBatch.received;
+        const total = this.activeBatch.expected;
+        const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+        if (this.progressText) {
+            this.progressText.textContent = `${completed} из ${total} файлов обработано`;
+        }
+
+        if (this.progressFill) {
+            this.progressFill.style.width = `${percentage}%`;
+        }
+
+        if (this.progressPercent) {
+            this.progressPercent.textContent = `${percentage}%`;
+        }
+    }
+
+    renderFileList() {
+        if (!this.fileList) return;
+
+        const files = Array.from(this.fileStatuses.values());
+        this.fileList.innerHTML = files.map(fileInfo => {
+            const status = fileInfo.status;
+            const fileName = fileInfo.file.name;
+            const fileIcon = this.getFileIcon(fileName);
+            
+            let statusText = '';
+            let progressIcon = '';
+            
+            switch (status) {
+                case 'waiting':
+                    statusText = 'Ожидание';
+                    progressIcon = '<div class="file-progress"><div class="spinner"></div></div>';
+                    break;
+                case 'processing':
+                    statusText = 'Обработка';
+                    progressIcon = '<div class="file-progress"><div class="spinner"></div></div>';
+                    break;
+                case 'completed':
+                    statusText = 'Готово';
+                    progressIcon = '<div class="file-progress"><div class="checkmark">✓</div></div>';
+                    break;
+                case 'error':
+                    statusText = 'Ошибка';
+                    progressIcon = '<div class="file-progress"><div class="error-mark">✕</div></div>';
+                    break;
+            }
+
+            return `
+                <div class="file-item ${status}">
+                    <div class="file-icon">${fileIcon}</div>
+                    <div class="file-name">${this.escapeHTML(fileName)}</div>
+                    <div class="file-status ${status}">${statusText}</div>
+                    ${progressIcon}
+                </div>
+            `;
+        }).join('');
+    }
+
+    updateFileStatus(fileName, status) {
+        if (this.fileStatuses.has(fileName)) {
+            this.fileStatuses.get(fileName).status = status;
+            this.updateProgressBar();
+            this.renderFileList();
+        }
+    }
+
+    markFileAsProcessing(fileName) {
+        this.updateFileStatus(fileName, 'processing');
+    }
+
+    markFileAsCompleted(fileName) {
+        this.updateFileStatus(fileName, 'completed');
+    }
+
+    markFileAsError(fileName) {
+        this.updateFileStatus(fileName, 'error');
     }
 }
 

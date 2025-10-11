@@ -1032,8 +1032,209 @@ footer:before {
 /* Subtle selection */
 [data-theme="dark"] ::selection { background: rgba(110,168,255,0.35); color: #0a0d18; }
 
-/* Chips for 1C columns */
-.chips-container { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+/* Progress Bar Styles */
+.progress-section {
+    animation: fadeIn 0.8s ease-out;
+}
+
+.progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.progress-stats {
+    font-weight: 600;
+    color: var(--primary-color);
+    font-size: 1.1rem;
+}
+
+.progress-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.progress-bar {
+    flex: 1;
+    height: 12px;
+    background: rgba(0,0,0,0.1);
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+}
+
+[data-theme="dark"] .progress-bar {
+    background: rgba(255,255,255,0.1);
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+    border-radius: 6px;
+    width: 0%;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.progress-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255,255,255,0.3),
+        transparent
+    );
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+.progress-percentage {
+    font-weight: 700;
+    font-size: 1.2rem;
+    color: var(--primary-color);
+    min-width: 50px;
+    text-align: center;
+}
+
+.progress-details {
+    margin-top: 15px;
+}
+
+.file-list {
+    display: grid;
+    gap: 8px;
+}
+
+.file-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 15px;
+    background: rgba(0,0,0,0.03);
+    border-radius: 8px;
+    border-left: 3px solid #ddd;
+    transition: all 0.3s ease;
+}
+
+[data-theme="dark"] .file-item {
+    background: rgba(255,255,255,0.04);
+    border-left-color: rgba(255,255,255,0.2);
+}
+
+.file-item.processing {
+    border-left-color: #ff9800;
+    background: rgba(255,152,0,0.05);
+}
+
+.file-item.completed {
+    border-left-color: #4caf50;
+    background: rgba(76,175,80,0.05);
+}
+
+.file-item.error {
+    border-left-color: #f44336;
+    background: rgba(244,67,54,0.05);
+}
+
+.file-icon {
+    font-size: 1.2rem;
+    width: 24px;
+    text-align: center;
+}
+
+.file-name {
+    flex: 1;
+    font-weight: 500;
+    font-size: 0.95rem;
+    color: var(--text-color);
+}
+
+.file-status {
+    font-size: 0.9rem;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.file-status.waiting {
+    color: #666;
+    background: rgba(0,0,0,0.1);
+}
+
+.file-status.processing {
+    color: #ff9800;
+    background: rgba(255,152,0,0.1);
+}
+
+.file-status.completed {
+    color: #4caf50;
+    background: rgba(76,175,80,0.1);
+}
+
+.file-status.error {
+    color: #f44336;
+    background: rgba(244,67,54,0.1);
+}
+
+.file-progress {
+    width: 20px;
+    height: 20px;
+    position: relative;
+}
+
+.file-progress .spinner {
+    width: 100%;
+    height: 100%;
+    border: 2px solid #ddd;
+    border-top: 2px solid var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+.file-progress .checkmark {
+    width: 100%;
+    height: 100%;
+    color: #4caf50;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.file-progress .error-mark {
+    width: 100%;
+    height: 100%;
+    color: #f44336;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Chips for 1C columns - ЗАКОММЕНТИРОВАНО */
+/* .chips-container { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .chip {
     display: inline-flex;
     align-items: center;

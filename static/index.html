@@ -66,14 +66,14 @@
                         </div>
                     </div>
                     
-                    <div class="form-group">
+                    <!-- <div class="form-group">
                         <label for="columns1cInput">Введите колонки в 1С</label>
                         <input type="text" id="columns1cInput" name="columns1cInput" placeholder="Например: дата, имя, сумма">
                         <div id="columns1cChips" class="chips-container" aria-live="polite"></div>
                         <small class="form-hint">Нажимайте Enter после каждого слова, чтобы добавить поле</small>
                     </div>
                     
-                    <input type="hidden" id="columns1c" name="columns1c" value="">
+                    <input type="hidden" id="columns1c" name="columns1c" value=""> -->
                     
                     <div class="form-group">
                         <button type="submit" id="submitBtn" class="btn-glow">Начать обработку</button>
@@ -105,10 +105,40 @@
                             <p>Представление результатов в удобном формате для дальнейшей обработки</p>
                         </div>
                     </li>
+                    <li class="feature-item">
+                        <span class="feature-icon">🔗</span>
+                        <div class="feature-content">
+                            <h4>Интеграция с CRM и BPM системами</h4>
+                            <p>Поддержка популярных платформ: 1С, Битрикс24, amoCRM, SAP, Microsoft Dynamics, Megaplan и др.</p>
+                        </div>
+                    </li>
                 </ul>
             </div>
             
             <div id="statusMessage" class="status-message"></div>
+            
+            <!-- Progress Bar Section -->
+            <div id="progressSection" class="card card response-section glass" style="display: none;">
+                <div class="progress-header">
+                    <h3>Обработка документов</h3>
+                    <div class="progress-stats">
+                        <span id="progressText">0 из 0 файлов обработано</span>
+                    </div>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div id="progressFill" class="progress-fill"></div>
+                    </div>
+                    <div class="progress-percentage">
+                        <span id="progressPercent">0%</span>
+                    </div>
+                </div>
+                <div id="progressDetails" class="progress-details">
+                    <div class="file-list" id="fileList">
+                        <!-- Файлы будут добавлены динамически -->
+                    </div>
+                </div>
+            </div>
             
             <div class="card response-section glass">
                 <div class="response-header">

@@ -9,6 +9,7 @@ services:
       - "8080:8080"
     environment:
       - GO_ENV=production
+      - DATABASE_URL=postgres://appuser:apppass@postgres:5432/appdb?sslmode=disable
     volumes:
       # Для логов (опционально)
       - ./logs:/app/logs
@@ -37,6 +38,41 @@ services:
     networks:
       - app-network
 
+  postgres:
+    image: postgres:15-alpine
+    container_name: app-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=appuser
+      - POSTGRES_PASSWORD=apppass
+      - POSTGRES_DB=appdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: app-pgadmin
+    restart: unless-stopped
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@example.com
+      - PGADMIN_DEFAULT_PASSWORD=adminpass
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    networks:
+      - app-network
+
 networks:
   app-network:
     driver: bridge 
+
+volumes:
+  db-data:
+  pgadmin-data:

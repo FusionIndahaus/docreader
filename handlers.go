@@ -478,10 +478,11 @@ func handleGetResults(w http.ResponseWriter, r *http.Request) {
 // @Router /health [get]
 func handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 	health := map[string]interface{}{
-		"status":    "healthy",
-		"message":   "Document AI работает нормально",
-		"timestamp": time.Now().Format(time.RFC3339),
-		"version":   "2.0.0",
+		"status":     "healthy",
+		"message":    "Document AI работает нормально",
+		"timestamp":  time.Now().Format(time.RFC3339),
+		"version":    "2.0.0",
+		"db_enabled": strings.TrimSpace(os.Getenv("DATABASE_URL")) != "",
 	}
 
 	sendJSONResponse(w, APIResponse{

@@ -22,70 +22,79 @@ if [ -n "$SSH_PASS_CMD" ]; then
   SSH_CMD="$SSH_PASS_CMD ssh -o StrictHostKeyChecking=no"
 fi
 
-echo "🚀 Начинаем деплой приложения $APP_NAME..."
+echo "🚀 Начинаем деплой приложения $APP_NAME (Docker Compose)..."
 
-# 1. Собираем приложение для Linux
-echo "📦 Сборка приложения..."
-GOOS=linux GOARCH=amd64 go build -o $APP_NAME .
+# Формируем архив с compose-окружением и исходниками
+echo "📁 Подготовка архива compose..."
+tar -czf $APP_NAME.compose.tar.gz \
+  Dockerfile \
+  docker-compose.yml \
+  nginx.conf \
+  README.md \
+  Makefile \
+  .env \
+  go.mod \
+  go.sum \
+  *.go \
+  migrations/ \
+  docs/ \
+  static/
 
-# 2. Создаем архив с приложением
-echo "📁 Создание архива..."
-tar -czf $APP_NAME.tar.gz $APP_NAME static/ README.md .env
+echo "⬆️ Загрузка compose на сервер..."
+$SCP_CMD $APP_NAME.compose.tar.gz $SERVER_USER@$SERVER_HOST:/opt/
 
-# 3. Копируем на сервер (+ unit-файл)
-echo "⬆️ Загрузка на сервер..."
-$SCP_CMD $APP_NAME.tar.gz $SERVER_USER@$SERVER_HOST:/tmp/
-$SCP_CMD n8nuploader.service $SERVER_USER@$SERVER_HOST:/tmp/
-$SCP_CMD nginx-simple.conf $SERVER_USER@$SERVER_HOST:/tmp/
+echo "🔧 Разворачиваем compose на сервере..."
+$SSH_CMD $SERVER_USER@$SERVER_HOST << 'EOF'
+    set -e
+    APP_NAME="n8nuploader"
+    APP_DIR="/opt/$APP_NAME"
+    mkdir -p "${APP_DIR}"
+    cd /opt
+    tar -xzf $APP_NAME.compose.tar.gz -C "${APP_DIR}" || true
 
-# 4. Разворачиваем на сервере
-echo "🔧 Установка на сервере..."
-$SSH_CMD $SERVER_USER@$SERVER_HOST << EOF
-    # Останавливаем старую версию (если есть)
-    sudo systemctl stop $APP_NAME || true
-    
-    # Создаем директорию приложения
-    sudo mkdir -p $APP_DIR
-    
-    # Извлекаем архив
-    cd /tmp
-    tar -xzf $APP_NAME.tar.gz
-    
-    # Копируем файлы
-    sudo cp -r $APP_NAME static/ README.md .env $APP_DIR/
-    # Права для пользователя сервиса www-data
-    sudo chown -R www-data:www-data $APP_DIR
-    sudo chmod +x $APP_DIR/$APP_NAME
-    
-    # Устанавливаем unit-файл systemd
-    sudo mv /tmp/n8nuploader.service $SERVICE_FILE
-    sudo systemctl daemon-reload
-    sudo systemctl enable $APP_NAME || true
-    # Перезапускаем сервис
-    sudo systemctl restart $APP_NAME || sudo systemctl start $APP_NAME
-    sudo systemctl status $APP_NAME --no-pager || true
+    # Остановим старый systemd-сервис (если был ранее)
+    systemctl stop n8nuploader 2>/dev/null || true
+    systemctl disable n8nuploader 2>/dev/null || true
+    rm -f /etc/systemd/system/n8nuploader.service 2>/dev/null || true
+    systemctl daemon-reload || true
 
-    echo "== Установка/настройка nginx (HTTP) =="
-    if ! command -v nginx >/dev/null 2>&1; then
-        apt-get update -y && apt-get install -y nginx
+    # Остановим и отключим системный nginx, чтобы освободить 80/443
+    if systemctl list-unit-files | grep -q '^nginx.service'; then
+        systemctl stop nginx 2>/dev/null || true
+        systemctl disable nginx 2>/dev/null || true
     fi
-    # Размещаем простой HTTP-конфиг
-    sudo mv /tmp/nginx-simple.conf /etc/nginx/conf.d/app.conf
-    # Отключим дефолт, чтобы не конфликтовал (опционально)
-    if [ -f /etc/nginx/sites-enabled/default ]; then sudo rm -f /etc/nginx/sites-enabled/default; fi
-    nginx -t && systemctl reload nginx || systemctl restart nginx || true
-    # Разрешим HTTP в firewall (если ufw включен)
+
+    # Установка Docker и Docker Compose (если нет)
+    if ! command -v docker >/dev/null 2>&1; then
+        apt-get update -y
+        apt-get install -y ca-certificates curl gnupg lsb-release
+        install -m 0755 -d /etc/apt/keyrings
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        chmod a+r /etc/apt/keyrings/docker.gpg
+        echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+          \
+          focal stable" > /etc/apt/sources.list.d/docker.list
+        apt-get update -y
+        apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+        systemctl enable docker --now
+    fi
+
+    cd "${APP_DIR}"
+    # Остановим предыдущие контейнеры стека, если запущены
+    docker compose down || true
+    # На всякий случай удалим висячий контейнер nginx-proxy
+    docker rm -f nginx-proxy 2>/dev/null || true
+    docker compose pull || true
+    docker compose build --no-cache
+    docker compose up -d
+
     if command -v ufw >/dev/null 2>&1; then
         ufw allow 80/tcp || true
+        ufw allow 443/tcp || true
         ufw allow 8080/tcp || true
+        ufw allow 5050/tcp || true
+        ufw allow 5432/tcp || true
     fi
-    
-    # Очищаем временные файлы
-    rm -f /tmp/$APP_NAME.tar.gz
 EOF
 
-echo "✅ Деплой завершен!"
-echo "🔗 Сервис перезапущен через systemd. При необходимости настройте Nginx."
-
-# Очищаем локальные временные файлы
-rm -f $APP_NAME $APP_NAME.tar.gz 
+echo "✅ Деплой через Docker Compose завершен!" 

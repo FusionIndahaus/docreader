@@ -8,6 +8,10 @@ package main
 
 func main() {
 	initEnvVariables()
+	if err := initDatabase(); err != nil {
+		println("WARNING: DB connect failed:", err.Error())
+	}
+	defer closeDatabase()
 	setupRoutes()
 	startServer()
 }

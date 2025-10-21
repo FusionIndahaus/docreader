@@ -9,7 +9,11 @@ services:
       - "8080:8080"
     environment:
       - GO_ENV=production
-      - DATABASE_URL=postgres://appuser:apppass@postgres:5432/appdb?sslmode=disable
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - DATABASE_URL=${DATABASE_URL}
+      - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL}
     volumes:
       # Для логов (опционально)
       - ./logs:/app/logs
@@ -52,6 +56,11 @@ services:
       - db-data:/var/lib/postgresql/data
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   pgadmin:
     image: dpage/pgadmin4:8

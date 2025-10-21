@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Вход</title>
+  <link rel="stylesheet" href="/static/admin/styles.css" />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <style>
+    body { display:flex; align-items:center; justify-content:center; min-height:100vh; background:#0b0f1a; }
+    .card { background:#111827; padding:24px; border-radius:12px; width:100%; max-width:380px; box-shadow:0 10px 30px rgba(0,0,0,.4); }
+    h1 { color:#fff; font-size:20px; margin:0 0 16px; }
+    label { color:#cbd5e1; font-size:14px; display:block; margin:12px 0 6px; }
+    input { width:100%; padding:10px 12px; border-radius:8px; border:1px solid #1f2937; background:#0f172a; color:#e5e7eb; }
+    .btn { margin-top:16px; width:100%; padding:10px 12px; border-radius:8px; background:#10b981; color:#0b0f1a; border:none; cursor:pointer; font-weight:600; }
+    .btn:hover { filter:brightness(1.1); }
+    .err { color:#fca5a5; margin-top:10px; min-height:18px; }
+  </style>
+  <script defer src="/static/user/login.js"></script>
+</head>
+<body>
+  <div class="card">
+    <h1>Вход</h1>
+    <form id="loginForm">
+      <label for="email">Email</label>
+      <input id="email" type="email" required />
+      <label for="password">Пароль</label>
+      <input id="password" type="password" required />
+      <button class="btn" type="submit">Войти</button>
+      <div class="err" id="err"></div>
+    </form>
+  </div>
+</body>
+</html>
+

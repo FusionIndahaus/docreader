@@ -1,8 +1,13 @@
 package main
 
 import (
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"os"
 	"strings"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 // getEnv возвращает значение переменной окружения или дефолт
@@ -31,4 +36,29 @@ func sanitizeFileName(name string) string {
 		return "file"
 	}
 	return b.String()
+}
+
+// safeCompareStrings делает сравнение строк в постоянное время
+func safeCompareStrings(a, b string) bool {
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+}
+
+func hashPassword(plain string) (string, error) {
+	b, err := bcrypt.GenerateFromPassword([]byte(plain), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func checkPasswordHash(hash, plain string) bool {
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(plain)) == nil
+}
+
+func generateSessionToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }

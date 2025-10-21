@@ -26,12 +26,17 @@ make test    # go test ./...
 make run     # собрать и стартануть
 ```
 
-### Конфиг (env'ы, хардкодить не надо)
-- `N8N_WEBHOOK_URL` — куда слать multipart (обязателен, иначе дефолт, но ты понял).
-- `SERVER_PORT` — порт HTTP (дефолт 8080).
-- `MAX_FILE_SIZE_MB` — лимит загрузки (дефолт 50).
-- `MAX_RESPONSES` — сколько результатов держать в памяти (дефолт 20).
-- `STATIC_DIR` — откуда отдаём фронт (дефолт `static`).
+### Конфиг (env'ы)
+- `SERVER_PORT` — порт HTTP (дефолт 8080)
+- `MAX_FILE_SIZE_MB` — лимит загрузки (дефолт 50)
+- `MAX_RESPONSES` — сколько результатов держать в памяти (дефолт 20)
+- `STATIC_DIR` — откуда отдаём фронт (дефолт `static`)
+- `N8N_WEBHOOK_URL` — URL вебхука n8n
+- `DATABASE_URL` — строка подключения к Postgres
+  - Compose: `postgres://appuser:apppass@postgres:5432/appdb?sslmode=disable`
+  - Local:   `postgres://appuser:apppass@localhost:5432/appdb?sslmode=disable`
+- `ADMIN_EMAIL`, `ADMIN_PASSWORD` — bootstrap-учётка для входа в админку
+- `SESSION_SECRET` — секрет подписи сессий (замените на случайный)
 
 Грузится в `config.go`. Логика в `handlers.go`. Ничего лишнего.
 
@@ -67,12 +72,22 @@ go build -ldflags="-s -w" -o document-ai .
 ./document-ai
 ```
 
-Скрипт деплоя: `deploy.sh` — собирает бинарь, кидает на сервер, рестартует сервис. Работает, если не мешать.
+Скрипт деплоя: `deploy.sh` — деплой через Docker Compose (приложение + Nginx + Postgres + PgAdmin).
+Артефакты: `Dockerfile`, `docker-compose.yml`, `migrations/`.
+
+После деплоя примените миграции (один раз):
+```bash
+goose -dir ./migrations postgres "postgres://appuser:apppass@45.82.153.200:5432/appdb?sslmode=disable" up
+```
+
+PgAdmin: `http://SERVER:5050/` (логин/пароль из docker-compose или .env).
 
 ### CI/CD
 - GitHub Actions: тесты, сборка, отчёты. Главное — собираем весь пакет, а не один файл. Уже настроено.
 
 ### Примечания
-- Хотите стейт не в памяти — прикручивайте storage сами (интерфейсами инициализация не завязана, вынесете без боли).
+- Admin UI находится по адресу `/static/admin/`.
+- API админки: `/admin/login`, `/admin/logout`, `/admin/customers*`, `/admin/subscriptions/create`.
+- Хотите стейт не в памяти — теперь Postgres. Таблицы создаются миграциями из `migrations/`.
 - Логи: оставлены только предупреждения/ошибки. Если надо болтологию — добавьте уровень через env.
 - n8n не отвечает — вернём ошибку. Ретраев нет, потому что не надо до тех пор, пока не надо.

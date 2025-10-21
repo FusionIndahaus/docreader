@@ -14,6 +14,10 @@ var (
 	maxFileSize   int64
 	maxResponses  int
 	staticDir     string
+	sessionSecret string
+	dbDSN         string
+	adminEmail    string
+	adminPassword string
 )
 
 func initEnvVariables() {
@@ -57,4 +61,17 @@ func initEnvVariables() {
 	if staticDir == "" {
 		staticDir = "static"
 	}
+
+	sessionSecret = os.Getenv("SESSION_SECRET")
+	if sessionSecret == "" {
+		sessionSecret = "dev-secret-change-me"
+	}
+
+	dbDSN = os.Getenv("DATABASE_URL")
+	if dbDSN == "" {
+		dbDSN = "postgres://appuser:apppass@localhost:5432/appdb?sslmode=disable"
+	}
+
+	adminEmail = os.Getenv("ADMIN_EMAIL")
+	adminPassword = os.Getenv("ADMIN_PASSWORD")
 }

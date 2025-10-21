@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin</title>
+  <link rel="stylesheet" href="/static/admin/styles.css" />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <style>
+    body{background:#0b0f1a;color:#e5e7eb}
+    .wrap{max-width:1100px;margin:40px auto;padding:0 16px}
+    h1{font-size:22px;margin-bottom:16px}
+    .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:16px}
+    table{width:100%;border-collapse:collapse;background:#0f172a;border-radius:12px;overflow:hidden}
+    th,td{padding:10px 12px;border-bottom:1px solid #1f2937}
+    th{color:#9ca3af;text-align:left;background:#0b1224}
+    tr:hover td{background:#0b1224}
+    .btn{background:linear-gradient(180deg,#6d72ff,#5a60f0);color:#fff;border:none;border-radius:10px;padding:10px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;box-shadow:0 6px 16px rgba(99,102,241,.35)}
+    .btn:hover{filter:brightness(1.05)}
+    .btn.secondary{background:#374151;box-shadow:none}
+    .btn.danger{background:linear-gradient(180deg,#f87171,#ef4444)}
+    .toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);background:#111827;color:#e5e7eb;padding:12px 16px;border-radius:10px;border:1px solid #374151;box-shadow:0 10px 30px rgba(0,0,0,.4);display:none;z-index:1100}
+    .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:1090}
+    .modal .box{background:#0f172a;border:1px solid #1f2937;border-radius:12px;padding:16px;max-width:480px;width:92%}
+    .muted{color:#94a3b8;font-size:12px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+    input,select{width:100%;padding:10px;border-radius:8px;border:1px solid #1f2937;background:#0f172a;color:#e5e7eb}
+    .card{background:#111827;padding:16px;border-radius:12px}
+  </style>
+  <script defer src="/static/admin/admin.js"></script>
+</head>
+<body>
+  <div id="toast" class="toast"></div>
+  <div id="modal" class="modal">
+    <div class="box">
+      <h3 style="margin:0 0 8px">Учетные данные клиента</h3>
+      <div id="modalContent" class="muted"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+        <button class="btn secondary" id="modalCopy">Копировать</button>
+        <button class="btn" id="modalClose">Закрыть</button>
+      </div>
+    </div>
+  </div>
+  <div class="wrap">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h1>Админка</h1>
+      <button class="btn secondary" id="logoutBtn">Выйти</button>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0 0 12px;font-size:18px">Клиенты</h2>
+      <div class="toolbar">
+        <button class="btn" id="createCustomerBtn">Добавить клиента</button>
+      </div>
+      <table id="customersTable">
+        <thead>
+          <tr><th>ID</th><th>Email</th><th>Имя</th><th>Компания</th><th>Статус</th><th>Создан</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h2 style="margin:0 0 12px;font-size:18px">Новая подписка</h2>
+      <div class="grid">
+        <div>
+          <label>Клиент ID</label>
+          <input id="subCustomerId" placeholder="uuid" />
+        </div>
+        <div>
+          <label>Лимит (quota_total)</label>
+          <input id="subQuota" type="number" value="1500" />
+        </div>
+        <div>
+          <label>Начало периода</label>
+          <input id="subStart" type="date" />
+        </div>
+        <div>
+          <label>Конец периода</label>
+          <input id="subEnd" type="date" />
+        </div>
+      </div>
+      <button class="btn" id="createSubBtn">Создать подписку</button>
+    </div>
+  </div>
+</body>
+</html>
+

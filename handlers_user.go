@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -82,4 +83,276 @@ func requireUser(next http.HandlerFunc) http.HandlerFunc {
 		}
 		next(w, r)
 	}
+}
+
+// handleUserProfile godoc
+// @Summary Получить профиль пользователя
+// @Description Возвращает информацию о текущем пользователе
+// @Tags User
+// @Produce json
+// @Success 200 {object} APIResponse
+// @Failure 401 {object} APIResponse
+// @Router /user/profile [get]
+func handleUserProfile(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		handleUserProfileGet(w, r)
+	} else if r.Method == http.MethodPut {
+		handleUserProfileUpdate(w, r)
+	} else {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+}
+
+func handleUserProfileGet(w http.ResponseWriter, r *http.Request) {
+	c, err := r.Cookie("user_session")
+	if err != nil || c.Value == "" || userSessions[c.Value] == "" {
+		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	email := userSessions[c.Value]
+	if db == nil {
+		sendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
+		return
+	}
+
+	var customer struct {
+		Email   string `json:"email"`
+		Name    string `json:"name"`
+		Company string `json:"company"`
+		Status  string `json:"status"`
+	}
+
+	row := db.QueryRow(`
+		SELECT email, name, company, status 
+		FROM customers 
+		WHERE deleted_at IS NULL AND lower(email) = lower($1)
+	`, email)
+
+	if err := row.Scan(&customer.Email, &customer.Name, &customer.Company, &customer.Status); err != nil {
+		if err == sql.ErrNoRows {
+			sendJSONError(w, "user not found", http.StatusNotFound)
+			return
+		}
+		sendJSONError(w, "server error", http.StatusInternalServerError)
+		return
+	}
+
+	sendJSONResponse(w, APIResponse{
+		Status: "success",
+		Data:   customer,
+	})
+}
+
+func handleUserProfileUpdate(w http.ResponseWriter, r *http.Request) {
+	c, err := r.Cookie("user_session")
+	if err != nil || c.Value == "" || userSessions[c.Value] == "" {
+		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	email := userSessions[c.Value]
+	if db == nil {
+		sendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
+		return
+	}
+
+	var updateData struct {
+		Name    string `json:"name"`
+		Company string `json:"company"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
+		sendJSONError(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	_, err = db.Exec(`
+		UPDATE customers 
+		SET name = $1, company = $2, updated_at = now()
+		WHERE deleted_at IS NULL AND lower(email) = lower($3)
+	`, updateData.Name, updateData.Company, email)
+
+	if err != nil {
+		sendJSONError(w, "update failed", http.StatusInternalServerError)
+		return
+	}
+
+	sendJSONResponse(w, APIResponse{
+		Status:  "success",
+		Message: "Profile updated successfully",
+	})
+}
+
+// handleUserSubscription godoc
+// @Summary Получить информацию о подписке
+// @Description Возвращает информацию о текущей подписке пользователя
+// @Tags User
+// @Produce json
+// @Success 200 {object} APIResponse
+// @Failure 401 {object} APIResponse
+// @Router /user/subscription [get]
+func handleUserSubscription(w http.ResponseWriter, r *http.Request) {
+	c, err := r.Cookie("user_session")
+	if err != nil || c.Value == "" || userSessions[c.Value] == "" {
+		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	email := userSessions[c.Value]
+	if db == nil {
+		sendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
+		return
+	}
+
+	var subscription struct {
+		Status      string `json:"status"`
+		PeriodStart string `json:"period_start"`
+		PeriodEnd   string `json:"period_end"`
+		QuotaTotal  int    `json:"quota_total"`
+		UsageCount  int    `json:"usage_count"`
+	}
+
+	row := db.QueryRow(`
+		SELECT s.status, s.period_start, s.period_end, s.quota_total,
+		       COALESCE(SUM(ue.amount), 0) as usage_count
+		FROM customers c
+		JOIN subscriptions s ON c.id = s.customer_id
+		LEFT JOIN usage_events ue ON s.id = ue.subscription_id
+		WHERE c.deleted_at IS NULL AND s.deleted_at IS NULL 
+		AND lower(c.email) = lower($1)
+		GROUP BY s.id, s.status, s.period_start, s.period_end, s.quota_total
+		ORDER BY s.created_at DESC
+		LIMIT 1
+	`, email)
+
+	if err := row.Scan(&subscription.Status, &subscription.PeriodStart, &subscription.PeriodEnd, &subscription.QuotaTotal, &subscription.UsageCount); err != nil {
+		if err == sql.ErrNoRows {
+			sendJSONError(w, "no active subscription", http.StatusNotFound)
+			return
+		}
+		sendJSONError(w, "server error", http.StatusInternalServerError)
+		return
+	}
+
+	sendJSONResponse(w, APIResponse{
+		Status: "success",
+		Data:   subscription,
+	})
+}
+
+// handleUserHistory godoc
+// @Summary Получить историю загрузок
+// @Description Возвращает историю обработки документов пользователя
+// @Tags User
+// @Produce json
+// @Success 200 {object} APIResponse
+// @Failure 401 {object} APIResponse
+// @Router /user/history [get]
+func handleUserHistory(w http.ResponseWriter, r *http.Request) {
+	c, err := r.Cookie("user_session")
+	if err != nil || c.Value == "" || userSessions[c.Value] == "" {
+		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	if db == nil {
+		sendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Получаем историю из глобального массива responses, фильтруя по пользователю
+	responsesMutex.RLock()
+	userHistory := make([]ProcessingResponse, 0)
+	for _, resp := range responses {
+		// Здесь можно добавить логику фильтрации по пользователю
+		// Пока возвращаем все результаты
+		userHistory = append(userHistory, resp)
+	}
+	responsesMutex.RUnlock()
+
+	// Ограничиваем количество записей
+	if len(userHistory) > 50 {
+		userHistory = userHistory[:50]
+	}
+
+	sendJSONResponse(w, APIResponse{
+		Status: "success",
+		Data:   userHistory,
+	})
+}
+
+// handleUserUsageStats godoc
+// @Summary Получить статистику использования
+// @Description Возвращает статистику использования квоты пользователя
+// @Tags User
+// @Produce json
+// @Success 200 {object} APIResponse
+// @Failure 401 {object} APIResponse
+// @Router /user/usage-stats [get]
+func handleUserUsageStats(w http.ResponseWriter, r *http.Request) {
+	c, err := r.Cookie("user_session")
+	if err != nil || c.Value == "" || userSessions[c.Value] == "" {
+		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	email := userSessions[c.Value]
+	if db == nil {
+		sendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
+		return
+	}
+
+	var stats struct {
+		TotalProcessed   int `json:"total_processed"`
+		MonthlyProcessed int `json:"monthly_processed"`
+		RemainingQuota   int `json:"remaining_quota"`
+	}
+
+	// Общее количество обработанных документов
+	row := db.QueryRow(`
+		SELECT COALESCE(SUM(ue.amount), 0) as total_processed
+		FROM customers c
+		JOIN subscriptions s ON c.id = s.customer_id
+		LEFT JOIN usage_events ue ON s.id = ue.subscription_id
+		WHERE c.deleted_at IS NULL AND s.deleted_at IS NULL 
+		AND lower(c.email) = lower($1)
+	`, email)
+	row.Scan(&stats.TotalProcessed)
+
+	// За последний месяц
+	row = db.QueryRow(`
+		SELECT COALESCE(SUM(ue.amount), 0) as monthly_processed
+		FROM customers c
+		JOIN subscriptions s ON c.id = s.customer_id
+		LEFT JOIN usage_events ue ON s.id = ue.subscription_id
+		WHERE c.deleted_at IS NULL AND s.deleted_at IS NULL 
+		AND lower(c.email) = lower($1)
+		AND ue.occurred_at >= NOW() - INTERVAL '1 month'
+	`, email)
+	row.Scan(&stats.MonthlyProcessed)
+
+	// Оставшаяся квота
+	row = db.QueryRow(`
+		SELECT s.quota_total - COALESCE(SUM(ue.amount), 0) as remaining_quota
+		FROM customers c
+		JOIN subscriptions s ON c.id = s.customer_id
+		LEFT JOIN usage_events ue ON s.id = ue.subscription_id
+		WHERE c.deleted_at IS NULL AND s.deleted_at IS NULL 
+		AND lower(c.email) = lower($1)
+		GROUP BY s.quota_total
+		ORDER BY s.created_at DESC
+		LIMIT 1
+	`, email)
+	row.Scan(&stats.RemainingQuota)
+
+	if stats.RemainingQuota < 0 {
+		stats.RemainingQuota = 0
+	}
+
+	sendJSONResponse(w, APIResponse{
+		Status: "success",
+		Data:   stats,
+	})
 }

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Личный кабинет - Document AI</title>
+    <link rel="stylesheet" href="/static/user/styles.css">
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container dashboard-container">
+        <header class="header">
+            <div class="header-content">
+                <h1>Document AI</h1>
+                <nav class="nav">
+                    <a href="/" class="nav-link">Главная</a>
+                    <a href="/user/dashboard" class="nav-link active">Личный кабинет</a>
+                    <button id="logoutBtn" class="btn btn-secondary">Выйти</button>
+                    
+                    <!-- Theme switcher в навигации -->
+                    <div class="theme-switcher">
+                        <input type="checkbox" id="themeSwitch" aria-label="Переключить тему">
+                        <label for="themeSwitch" class="switch">
+                            <span class="switch-glow"></span>
+                            <span class="switch-icon sun">☀️</span>
+                            <span class="switch-icon moon">🌙</span>
+                        </label>
+                    </div>
+                </nav>
+            </div>
+        </header>
+
+        <main class="main">
+            <!-- Личный кабинет - полноширинный блок -->
+            <div class="card dashboard-welcome">
+                <h2>Личный кабинет</h2>
+                <p>Добро пожаловать, <span id="userName">Пользователь</span>!</p>
+            </div>
+
+            <div class="dashboard-content">
+                    <!-- Информация о подписке -->
+                    <div class="card">
+                        <h3>Информация о подписке</h3>
+                        <div class="subscription-info">
+                            <div class="info-item">
+                                <span class="label">Статус:</span>
+                                <span id="subscriptionStatus" class="value">Загрузка...</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="label">Период:</span>
+                                <span id="subscriptionPeriod" class="value">Загрузка...</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="label">Квота:</span>
+                                <span id="subscriptionQuota" class="value">Загрузка...</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="label">Использовано:</span>
+                                <span id="usageCount" class="value">Загрузка...</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Профиль пользователя -->
+                    <div class="card">
+                        <h3>Профиль</h3>
+                        <div class="profile-form">
+                            <div class="form-group">
+                                <label for="userEmail">Email:</label>
+                                <input type="email" id="userEmail" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label for="userFullName">Имя:</label>
+                                <input type="text" id="userFullName">
+                            </div>
+                            <div class="form-group">
+                                <label for="userCompany">Компания:</label>
+                                <input type="text" id="userCompany">
+                            </div>
+                            <button id="updateProfileBtn" class="btn btn-primary">Обновить профиль</button>
+                        </div>
+                    </div>
+
+                    <!-- История загрузок -->
+                    <div class="card">
+                        <h3>История загрузок</h3>
+                        <div class="upload-history">
+                            <div id="uploadHistoryList" class="history-list">
+                                <div class="loading">Загрузка истории...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Статистика использования -->
+                    <div class="card">
+                        <h3>Статистика использования</h3>
+                        <div class="usage-stats">
+                            <div class="stat-item">
+                                <span class="stat-label">Всего обработано:</span>
+                                <span id="totalProcessed" class="stat-value">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">За последний месяц:</span>
+                                <span id="monthlyProcessed" class="stat-value">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Осталось квоты:</span>
+                                <span id="remainingQuota" class="stat-value">0</span>
+                            </div>
+                        </div>
+                    </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/user/dashboard.js"></script>
+</body>
+</html>

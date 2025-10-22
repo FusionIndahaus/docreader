@@ -63,4 +63,13 @@ func setupRoutes() {
 	// User auth
 	http.HandleFunc("/user/login", handleUserLogin)
 	http.HandleFunc("/user/logout", handleUserLogout)
+
+	// User dashboard
+	http.HandleFunc("/user/dashboard", requireUser(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, staticDir+"/user/dashboard.html")
+	}))
+	http.HandleFunc("/user/profile", requireUser(handleUserProfile))
+	http.HandleFunc("/user/subscription", requireUser(handleUserSubscription))
+	http.HandleFunc("/user/history", requireUser(handleUserHistory))
+	http.HandleFunc("/user/usage-stats", requireUser(handleUserUsageStats))
 }

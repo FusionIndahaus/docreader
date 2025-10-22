@@ -37,6 +37,7 @@ class DocumentAIApp {
         this.loadExistingResults();
         this.animateOnLoad();
         this.connectLiveUpdates();
+        this.setupLogout();
     }
     
     setupEventListeners() {
@@ -867,6 +868,30 @@ class DocumentAIApp {
 
     markFileAsError(fileName) {
         this.updateFileStatus(fileName, 'error');
+    }
+    
+    setupLogout() {
+        const logoutBtn = document.getElementById('logoutBtn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', async () => {
+                try {
+                    const response = await fetch('/user/logout', {
+                        method: 'POST',
+                        credentials: 'include'
+                    });
+                    
+                    if (response.ok) {
+                        window.location.href = '/static/user/login.html';
+                    } else {
+                        console.error('Logout failed');
+                        window.location.href = '/static/user/login.html';
+                    }
+                } catch (error) {
+                    console.error('Logout error:', error);
+                    window.location.href = '/static/user/login.html';
+                }
+            });
+        }
     }
 }
 

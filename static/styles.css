@@ -116,6 +116,36 @@ header {
     position: relative;
 }
 
+.header-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.main-nav {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.main-nav .nav-link {
+    color: var(--primary-color);
+    text-decoration: none;
+    padding: 10px 16px;
+    border-radius: 8px;
+    transition: var(--transition);
+    font-weight: 500;
+    border: 1px solid var(--primary-color);
+}
+
+.main-nav .nav-link:hover {
+    background: var(--primary-color);
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
 header:after {
     content: '';
     position: absolute;
@@ -971,6 +1001,18 @@ footer:before {
 [data-theme="light"] .response-section.glass .response-list { background: var(--bg-color); border: 1px solid var(--border-color); box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.05); }
 [data-theme="light"] .response-section.glass .response-item { background: var(--bg-card); color: var(--text-color); border-left-color: var(--primary-color); box-shadow: var(--shadow-sm); border-radius: 8px; }
 [data-theme="light"] .no-data { color: var(--text-light); }
+
+/* Navigation styles for dark theme */
+[data-theme="dark"] .main-nav .nav-link {
+    color: #6ea8ff;
+    border-color: #6ea8ff;
+}
+
+[data-theme="dark"] .main-nav .nav-link:hover {
+    background: #6ea8ff;
+    color: white;
+    box-shadow: 0 8px 20px rgba(110, 168, 255, 0.3);
+}
 
 /* Controls */
 [data-theme="dark"] .btn-glow {

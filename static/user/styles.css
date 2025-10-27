@@ -38,6 +38,21 @@
     opacity: 0.9;
 }
 
+/* Light theme for dashboard welcome */
+[data-theme="light"] .dashboard-welcome {
+    background: linear-gradient(135deg, #f5f7ff, #e3eaff);
+    color: var(--text-color);
+}
+
+[data-theme="light"] .dashboard-welcome h2 {
+    color: var(--primary-color);
+}
+
+[data-theme="light"] .dashboard-welcome p {
+    color: var(--text-color);
+    opacity: 1;
+}
+
 .dashboard-content {
     display: grid;
     grid-template-columns: repeat(2, 1fr);

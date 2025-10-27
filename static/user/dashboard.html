@@ -66,10 +66,6 @@
                         <h3>Профиль</h3>
                         <div class="profile-form">
                             <div class="form-group">
-                                <label for="userEmail">Email:</label>
-                                <input type="email" id="userEmail" readonly>
-                            </div>
-                            <div class="form-group">
                                 <label for="userFullName">Имя:</label>
                                 <input type="text" id="userFullName">
                             </div>
@@ -78,6 +74,49 @@
                                 <input type="text" id="userCompany">
                             </div>
                             <button id="updateProfileBtn" class="btn btn-primary">Обновить профиль</button>
+                        </div>
+                    </div>
+
+                    <!-- Смена пароля -->
+                    <div class="card">
+                        <h3>Смена пароля</h3>
+                        <div class="password-form">
+                            <div class="form-group">
+                                <label for="currentPassword">Текущий пароль:</label>
+                                <input type="password" id="currentPassword">
+                            </div>
+                            <div class="form-group">
+                                <label for="newPassword">Новый пароль:</label>
+                                <input type="password" id="newPassword">
+                            </div>
+                            <div class="form-group">
+                                <label for="confirmPassword">Подтвердите новый пароль:</label>
+                                <input type="password" id="confirmPassword">
+                            </div>
+                            <button id="changePasswordBtn" class="btn btn-primary">Изменить пароль</button>
+                        </div>
+                    </div>
+
+                    <!-- Настройки форматов -->
+                    <div class="card">
+                        <h3>Настройки отображения форматов</h3>
+                        <p>Выберите, какие форматы результата будут отображаться на главной странице:</p>
+                        <div class="settings-form">
+                            <div class="form-group checkbox-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="formatCsv" value="csv" checked>
+                                    <span>CSV</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="formatXlsx" value="xlsx" checked>
+                                    <span>XLSX</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="formatJson" value="json" checked>
+                                    <span>JSON</span>
+                                </label>
+                            </div>
+                            <button id="updateSettingsBtn" class="btn btn-primary">Сохранить настройки</button>
                         </div>
                     </div>
 

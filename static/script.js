@@ -27,6 +27,7 @@ class DocumentAIApp {
         this.results = [];
         this.activeBatch = null; // { id, expected, format, received, downloads: [], responses: [] }
         this.fileStatuses = new Map(); // { fileName: { status: 'waiting'|'processing'|'completed'|'error', seq: number } }
+        this.enabledFormats = ['csv', 'xlsx', 'json']; // По умолчанию все форматы
         
         this.init();
     }
@@ -34,6 +35,7 @@ class DocumentAIApp {
     init() {
         this.initTheme();
         this.setupEventListeners();
+        this.loadSettings();
         this.loadExistingResults();
         this.animateOnLoad();
         this.connectLiveUpdates();
@@ -870,6 +872,63 @@ class DocumentAIApp {
         this.updateFileStatus(fileName, 'error');
     }
     
+    async loadSettings() {
+        try {
+            const response = await fetch('/user/settings', {
+                method: 'GET',
+                credentials: 'include'
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.status === 'success' && data.data) {
+                    this.enabledFormats = data.data.output_formats || ['csv', 'xlsx', 'json'];
+                    this.updateFormatDisplay();
+                }
+            } else {
+                // При ошибке используем настройки по умолчанию
+                this.updateFormatDisplay();
+            }
+        } catch (error) {
+            console.error('Ошибка загрузки настроек:', error);
+            // При ошибке используем настройки по умолчанию
+            this.updateFormatDisplay();
+        }
+    }
+
+    updateFormatDisplay() {
+        const formatContainer = document.querySelector('.radio-group');
+        if (!formatContainer) return;
+
+        const allFormats = {
+            csv: { element: formatContainer.querySelector('[data-format="csv"]'), default: true },
+            xlsx: { element: formatContainer.querySelector('[data-format="xlsx"]'), default: false },
+            json: { element: formatContainer.querySelector('[data-format="json"]'), default: false }
+        };
+
+        // Показываем/скрываем форматы в зависимости от настроек
+        Object.keys(allFormats).forEach(format => {
+            const formatInfo = allFormats[format];
+            if (formatInfo.element) {
+                if (this.enabledFormats.includes(format)) {
+                    formatInfo.element.style.display = '';
+                } else {
+                    formatInfo.element.style.display = 'none';
+                }
+            }
+        });
+
+        // Проверяем, что выбранный формат доступен
+        const selectedFormat = document.querySelector('input[name="outputFormat"]:checked');
+        if (selectedFormat && !this.enabledFormats.includes(selectedFormat.value)) {
+            // Если выбранный формат недоступен, выбираем первый доступный
+            const firstAvailable = formatContainer.querySelector(`[data-format="${this.enabledFormats[0]}"] input`);
+            if (firstAvailable) {
+                firstAvailable.checked = true;
+            }
+        }
+    }
+
     setupLogout() {
         const logoutBtn = document.getElementById('logoutBtn');
         if (logoutBtn) {

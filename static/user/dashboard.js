@@ -8,6 +8,7 @@ class UserDashboard {
         this.bindEvents();
         this.initTheme();
         this.loadUserData();
+        this.loadSettings();
         this.loadSubscriptionInfo();
         this.loadUploadHistory();
         this.loadUsageStats();
@@ -20,6 +21,14 @@ class UserDashboard {
 
         document.getElementById('updateProfileBtn').addEventListener('click', () => {
             this.updateProfile();
+        });
+
+        document.getElementById('changePasswordBtn').addEventListener('click', () => {
+            this.changePassword();
+        });
+
+        document.getElementById('updateSettingsBtn').addEventListener('click', () => {
+            this.updateSettings();
         });
 
         // Theme switcher
@@ -51,7 +60,6 @@ class UserDashboard {
 
     displayUserData(userData) {
         document.getElementById('userName').textContent = userData.name || userData.email;
-        document.getElementById('userEmail').value = userData.email;
         document.getElementById('userFullName').value = userData.name || '';
         document.getElementById('userCompany').value = userData.company || '';
     }
@@ -187,6 +195,127 @@ class UserDashboard {
         } catch (error) {
             console.error('Ошибка обновления профиля:', error);
             alert('Ошибка обновления профиля');
+        }
+    }
+
+    async loadSettings() {
+        try {
+            const response = await fetch('/user/settings', {
+                method: 'GET',
+                credentials: 'include'
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.status === 'success') {
+                    this.displaySettings(data.data);
+                }
+            }
+        } catch (error) {
+            console.error('Ошибка загрузки настроек:', error);
+        }
+    }
+
+    displaySettings(settings) {
+        // Получаем список разрешенных форматов
+        const outputFormats = settings.output_formats || ['csv', 'xlsx', 'json'];
+        
+        // Устанавливаем чекбоксы
+        document.getElementById('formatCsv').checked = outputFormats.includes('csv');
+        document.getElementById('formatXlsx').checked = outputFormats.includes('xlsx');
+        document.getElementById('formatJson').checked = outputFormats.includes('json');
+    }
+
+    async updateSettings() {
+        const outputFormats = [];
+        if (document.getElementById('formatCsv').checked) outputFormats.push('csv');
+        if (document.getElementById('formatXlsx').checked) outputFormats.push('xlsx');
+        if (document.getElementById('formatJson').checked) outputFormats.push('json');
+
+        if (outputFormats.length === 0) {
+            alert('Выберите хотя бы один формат');
+            return;
+        }
+
+        try {
+            const response = await fetch('/user/settings', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                    output_formats: outputFormats
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.status === 'success') {
+                    alert('Настройки успешно сохранены');
+                } else {
+                    alert('Ошибка сохранения настроек: ' + (data.message || 'Неизвестная ошибка'));
+                }
+            } else {
+                alert('Ошибка сохранения настроек');
+            }
+        } catch (error) {
+            console.error('Ошибка сохранения настроек:', error);
+            alert('Ошибка сохранения настроек');
+        }
+    }
+
+    async changePassword() {
+        const currentPassword = document.getElementById('currentPassword').value;
+        const newPassword = document.getElementById('newPassword').value;
+        const confirmPassword = document.getElementById('confirmPassword').value;
+
+        if (!currentPassword || !newPassword || !confirmPassword) {
+            alert('Все поля обязательны для заполнения');
+            return;
+        }
+
+        if (newPassword.length < 6) {
+            alert('Новый пароль должен содержать минимум 6 символов');
+            return;
+        }
+
+        if (newPassword !== confirmPassword) {
+            alert('Новые пароли не совпадают');
+            return;
+        }
+
+        try {
+            const response = await fetch('/user/change-password', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                    current_password: currentPassword,
+                    new_password: newPassword
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.status === 'success') {
+                    alert('Пароль успешно изменен');
+                    // Очищаем поля формы
+                    document.getElementById('currentPassword').value = '';
+                    document.getElementById('newPassword').value = '';
+                    document.getElementById('confirmPassword').value = '';
+                } else {
+                    alert('Ошибка смены пароля: ' + (data.message || 'Неизвестная ошибка'));
+                }
+            } else {
+                const data = await response.json();
+                alert('Ошибка смены пароля: ' + (data.message || 'Неизвестная ошибка'));
+            }
+        } catch (error) {
+            console.error('Ошибка смены пароля:', error);
+            alert('Ошибка смены пароля');
         }
     }
 

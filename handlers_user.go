@@ -185,6 +185,258 @@ func handleUserProfileUpdate(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleUserSettings godoc
+// @Summary Получить/обновить настройки пользователя
+// @Description Возвращает или обновляет настройки пользователя
+// @Tags User
+// @Produce json
+// @Success 200 {object} APIResponse
+// @Failure 401 {object} APIResponse
+// @Router /user/settings [get]
+func handleUserSettings(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		handleUserSettingsGet(w, r)
+	} else if r.Method == http.MethodPut {
+		handleUserSettingsUpdate(w, r)
+	} else {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+}
+
+func handleUserSettingsGet(w http.ResponseWriter, r *http.Request) {
+	c, err := r.Cookie("user_session")
+	if err != nil || c.Value == "" || userSessions[c.Value] == "" {
+		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	email := userSessions[c.Value]
+	if db == nil {
+		sendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
+		return
+	}
+
+	var metadata string
+	row := db.QueryRow(`
+		SELECT metadata 
+		FROM customers 
+		WHERE deleted_at IS NULL AND lower(email) = lower($1)
+	`, email)
+
+	if err := row.Scan(&metadata); err != nil {
+		if err == sql.ErrNoRows {
+			sendJSONError(w, "user not found", http.StatusNotFound)
+			return
+		}
+		sendJSONError(w, "server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Парсим метаданные
+	var settings map[string]interface{}
+	if metadata == "" || metadata == "{}" {
+		settings = map[string]interface{}{
+			"output_formats": []string{"csv", "xlsx", "json"},
+		}
+	} else {
+		if err := json.Unmarshal([]byte(metadata), &settings); err != nil {
+			settings = map[string]interface{}{
+				"output_formats": []string{"csv", "xlsx", "json"},
+			}
+		}
+	}
+
+	sendJSONResponse(w, APIResponse{
+		Status: "success",
+		Data:   settings,
+	})
+}
+
+func handleUserSettingsUpdate(w http.ResponseWriter, r *http.Request) {
+	c, err := r.Cookie("user_session")
+	if err != nil || c.Value == "" || userSessions[c.Value] == "" {
+		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	email := userSessions[c.Value]
+	if db == nil {
+		sendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
+		return
+	}
+
+	var updateData struct {
+		OutputFormats []string `json:"output_formats"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
+		sendJSONError(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Валидация форматов
+	validFormats := map[string]bool{"csv": true, "xlsx": true, "json": true}
+	for _, format := range updateData.OutputFormats {
+		if !validFormats[format] {
+			sendJSONError(w, "invalid format", http.StatusBadRequest)
+			return
+		}
+	}
+
+	// Проверяем, что хотя бы один формат выбран
+	if len(updateData.OutputFormats) == 0 {
+		sendJSONError(w, "at least one format must be selected", http.StatusBadRequest)
+		return
+	}
+
+	// Получаем текущие метаданные
+	var currentMetadata string
+	row := db.QueryRow(`
+		SELECT metadata 
+		FROM customers 
+		WHERE deleted_at IS NULL AND lower(email) = lower($1)
+	`, email)
+
+	if err := row.Scan(&currentMetadata); err != nil {
+		if err == sql.ErrNoRows {
+			sendJSONError(w, "user not found", http.StatusNotFound)
+			return
+		}
+		sendJSONError(w, "server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Парсим текущие метаданные
+	var settings map[string]interface{}
+	if currentMetadata == "" || currentMetadata == "{}" {
+		settings = make(map[string]interface{})
+	} else {
+		if err := json.Unmarshal([]byte(currentMetadata), &settings); err != nil {
+			settings = make(map[string]interface{})
+		}
+	}
+
+	// Обновляем настройки форматов
+	settings["output_formats"] = updateData.OutputFormats
+
+	// Сериализуем обратно в JSON
+	metadataJSON, err := json.Marshal(settings)
+	if err != nil {
+		sendJSONError(w, "server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Обновляем в базе данных
+	_, err = db.Exec(`
+		UPDATE customers 
+		SET metadata = $1, updated_at = now()
+		WHERE deleted_at IS NULL AND lower(email) = lower($2)
+	`, string(metadataJSON), email)
+
+	if err != nil {
+		sendJSONError(w, "update failed", http.StatusInternalServerError)
+		return
+	}
+
+	sendJSONResponse(w, APIResponse{
+		Status:  "success",
+		Message: "Settings updated successfully",
+	})
+}
+
+// handleUserChangePassword godoc
+// @Summary Изменить пароль пользователя
+// @Description Изменяет пароль пользователя
+// @Tags User
+// @Accept json
+// @Produce json
+// @Param body body object true "Данные для смены пароля"
+// @Success 200 {object} APIResponse
+// @Failure 400 {object} APIResponse
+// @Failure 401 {object} APIResponse
+// @Router /user/change-password [post]
+func handleUserChangePassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	c, err := r.Cookie("user_session")
+	if err != nil || c.Value == "" || userSessions[c.Value] == "" {
+		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	email := userSessions[c.Value]
+	if db == nil {
+		sendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
+		return
+	}
+
+	var changePasswordData struct {
+		CurrentPassword string `json:"current_password"`
+		NewPassword     string `json:"new_password"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&changePasswordData); err != nil {
+		sendJSONError(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if changePasswordData.CurrentPassword == "" || changePasswordData.NewPassword == "" {
+		sendJSONError(w, "current_password and new_password required", http.StatusBadRequest)
+		return
+	}
+
+	// Проверка длины нового пароля
+	if len(changePasswordData.NewPassword) < 6 {
+		sendJSONError(w, "new password must be at least 6 characters", http.StatusBadRequest)
+		return
+	}
+
+	// Проверяем текущий пароль
+	var hash string
+	row := db.QueryRow("SELECT password_hash FROM customers WHERE deleted_at IS NULL AND lower(email)=lower($1)", email)
+	if err := row.Scan(&hash); err != nil {
+		if err == sql.ErrNoRows {
+			sendJSONError(w, "user not found", http.StatusNotFound)
+			return
+		}
+		sendJSONError(w, "server error", http.StatusInternalServerError)
+		return
+	}
+
+	if !checkPasswordHash(hash, changePasswordData.CurrentPassword) {
+		sendJSONError(w, "invalid current password", http.StatusUnauthorized)
+		return
+	}
+
+	// Хешируем новый пароль
+	newHash, err := hashPassword(changePasswordData.NewPassword)
+	if err != nil {
+		sendJSONError(w, "password hashing error", http.StatusInternalServerError)
+		return
+	}
+
+	// Обновляем пароль
+	_, err = db.Exec(`
+		UPDATE customers 
+		SET password_hash = $1, updated_at = now()
+		WHERE deleted_at IS NULL AND lower(email) = lower($2)
+	`, newHash, email)
+
+	if err != nil {
+		sendJSONError(w, "update failed", http.StatusInternalServerError)
+		return
+	}
+
+	sendJSONResponse(w, APIResponse{
+		Status:  "success",
+		Message: "Password changed successfully",
+	})
+}
+
 // handleUserSubscription godoc
 // @Summary Получить информацию о подписке
 // @Description Возвращает информацию о текущей подписке пользователя
@@ -264,12 +516,7 @@ func handleUserHistory(w http.ResponseWriter, r *http.Request) {
 
 	// Получаем историю из глобального массива responses, фильтруя по пользователю
 	responsesMutex.RLock()
-	userHistory := make([]ProcessingResponse, 0)
-	for _, resp := range responses {
-		// Здесь можно добавить логику фильтрации по пользователю
-		// Пока возвращаем все результаты
-		userHistory = append(userHistory, resp)
-	}
+	userHistory := append([]ProcessingResponse{}, responses...)
 	responsesMutex.RUnlock()
 
 	// Ограничиваем количество записей

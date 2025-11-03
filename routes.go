@@ -69,6 +69,8 @@ func setupRoutes() {
 		http.ServeFile(w, r, staticDir+"/user/dashboard.html")
 	}))
 	http.HandleFunc("/user/profile", requireUser(handleUserProfile))
+	http.HandleFunc("/user/change-password", requireUser(handleUserChangePassword))
+	http.HandleFunc("/user/settings", requireUser(handleUserSettings))
 	http.HandleFunc("/user/subscription", requireUser(handleUserSubscription))
 	http.HandleFunc("/user/history", requireUser(handleUserHistory))
 	http.HandleFunc("/user/usage-stats", requireUser(handleUserUsageStats))

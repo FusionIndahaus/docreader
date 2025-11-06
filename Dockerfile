@@ -19,8 +19,14 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -a -installsuffix cgo -o 
 # Используем минимальный образ для production
 FROM alpine:latest
 
-# Устанавливаем CA сертификаты для HTTPS запросов
-RUN apk --no-cache add ca-certificates
+# Устанавливаем CA сертификаты и утилиты для извлечения текста/OCR
+# poppler-utils -> pdftotext; tesseract-ocr + языковые пакеты
+RUN apk --no-cache add \
+    ca-certificates \
+    poppler-utils \
+    tesseract-ocr \
+    tesseract-ocr-data-eng \
+    tesseract-ocr-data-rus
 
 # Создаем непривилегированного пользователя
 RUN addgroup -g 1001 appgroup && adduser -D -u 1001 -G appgroup appuser
@@ -39,6 +45,9 @@ RUN chown -R appuser:appgroup /app
 
 # Переключаемся на непривилегированного пользователя
 USER appuser
+
+# Значения по умолчанию для OCR языков
+ENV OCR_LANGS=rus+eng
 
 # Открываем порт
 EXPOSE 8080

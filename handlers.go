@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"mime/multipart"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -79,8 +79,7 @@ func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 		outputFormat = "json"
 	}
 
-	// Считываем список колонок 1С (через запятую)
-	columns1c := strings.TrimSpace(r.FormValue("columns1c"))
+	// Считываем список колонок 1С (через запятую) — временно не используется
 
 	// Параметры батча (необязательные)
 	batchID := strings.TrimSpace(r.FormValue("batchId"))
@@ -104,8 +103,27 @@ func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := sendToN8n(message, file, header.Filename, outputFormat, columns1c, batchID, seq); err != nil {
-		log.Printf("ERROR: Ошибка отправки в n8n: %v", err)
+	// Читаем файл в память для дальнейшей предобработки (OCR/текст)
+	fileBytes, err := io.ReadAll(file)
+	if err != nil {
+		sendJSONError(w, "Не удалось прочитать файл", http.StatusInternalServerError)
+		return
+	}
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		// Грубая эвристика по расширению, если заголовка нет
+		switch strings.ToLower(filepath.Ext(header.Filename)) {
+		case ".pdf":
+			contentType = "application/pdf"
+		case ".jpg", ".jpeg":
+			contentType = "image/jpeg"
+		case ".png":
+			contentType = "image/png"
+		}
+	}
+
+	if err := startQwenProcessing(message, header.Filename, contentType, outputFormat, batchID, seq, fileBytes); err != nil {
+		log.Printf("ERROR: Ошибка запуска обработки через Qwen: %v", err)
 		sendJSONError(w, "Не удалось обработать документ: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -540,86 +558,220 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func sendToN8n(message string, file multipart.File, fileName string, outputFormat string, columns1c string, batchID string, seq int) error {
-	var buffer bytes.Buffer
-	writer := multipart.NewWriter(&buffer)
+// sendToN8n — удалено (миграция на Qwen/OpenRouter)
 
-	if err := writer.WriteField("message", message); err != nil {
-		return fmt.Errorf("не удалось добавить сообщение: %w", err)
+// startQwenProcessing запускает асинхронный запрос в Qwen через OpenRouter и публикует результат через SSE
+func startQwenProcessing(message string, fileName string, contentType string, outputFormat string, batchID string, seq int, fileBytes []byte) error {
+	if strings.TrimSpace(openRouterAPIKey) == "" {
+		return fmt.Errorf("не задан OPENROUTER_API_KEY")
 	}
 
-	if err := writer.WriteField("outputFormat", outputFormat); err != nil {
-		return fmt.Errorf("не удалось добавить формат результата: %w", err)
+	type chatMessage struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}
+	type chatRequest struct {
+		Model    string        `json:"model"`
+		Messages []chatMessage `json:"messages"`
+	}
+	type choiceMessage struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}
+	type choice struct {
+		Index   int           `json:"index"`
+		Message choiceMessage `json:"message"`
+	}
+	type chatResponse struct {
+		Choices []choice `json:"choices"`
 	}
 
-	// Проксируем список колонок 1С, если задан
-	if columns1c != "" {
-		if err := writer.WriteField("columns1c", columns1c); err != nil {
-			return fmt.Errorf("не удалось добавить columns1c: %w", err)
+	// Извлечём текст из документа (PDF -> текст, JPG/PNG -> OCR). Ошибки не фатальны — продолжим без текста.
+	docText, _ := extractDocumentText(fileBytes, fileName, contentType)
+
+	// Подготовим промпт.
+	var formatHint string
+	switch strings.ToLower(strings.TrimSpace(outputFormat)) {
+	case "json":
+		formatHint = "Верни ТОЛЬКО валидный JSON без комментариев и пояснений. Используй корректный JSON, без лишних полей."
+	case "csv":
+		formatHint = "Верни ТОЛЬКО CSV-текст с первой строкой-заголовком и данными, без комментариев и пояснений. Разделитель — запятая. Экранируй кавычками поля с запятыми."
+	case "xlsx":
+		formatHint = "Верни таблицу в виде ТОЛЬКО CSV-текста (позже конвертируем в XLSX). Первая строка — заголовки."
+	default:
+		formatHint = "Верни краткий и конкретный ответ."
+	}
+
+	var docBlock string
+	if strings.TrimSpace(docText) != "" {
+		// Ограничим объём текста, чтобы не распухали токены
+		clipped := truncateString(docText, 16000)
+		docBlock = "\n\nТекст документа (усечён):\n" + clipped
+	}
+
+	userPrompt := fmt.Sprintf(
+		"Ты помощник по документам. Пользователь загрузил файл '%s'. Задача: %s\n\nТребования к формату: %s%s",
+		truncateString(fileName, 120), truncateString(message, 4000), formatHint, docBlock,
+	)
+
+	reqBody := chatRequest{
+		Model: qwenModel,
+		Messages: []chatMessage{
+			{Role: "system", Content: "Отвечай на русском. Будь краток и по делу."},
+			{Role: "user", Content: userPrompt},
+		},
+	}
+
+	// Делаем запрос в фоне и публикуем результат
+	go func(rb chatRequest, batchID string, seq int) {
+		// Подготовим HTTP-запрос
+		buf, _ := json.Marshal(rb)
+		httpClient := &http.Client{Timeout: 60 * time.Second}
+		endpoint := strings.TrimRight(openRouterBaseURL, "/") + "/chat/completions"
+		req, err := http.NewRequest("POST", endpoint, bytes.NewReader(buf))
+		if err != nil {
+			publishProcessingResult("Не удалось сформировать запрос к модели", "error", batchID, seq, "")
+			return
 		}
-	}
-
-	if err := writer.WriteField("fileName", fileName); err != nil {
-		return fmt.Errorf("не удалось добавить имя файла: %w", err)
-	}
-
-	if err := writer.WriteField("webhookUrl", n8nWebhookURL); err != nil {
-		return fmt.Errorf("не удалось добавить webhook URL: %w", err)
-	}
-
-	if err := writer.WriteField("executionMode", "production"); err != nil {
-		return fmt.Errorf("не удалось добавить режим выполнения: %w", err)
-	}
-
-	// Проксируем информацию о батче, если есть
-	if strings.TrimSpace(batchID) != "" {
-		if err := writer.WriteField("batchId", batchID); err != nil {
-			return fmt.Errorf("не удалось добавить batchId: %w", err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+openRouterAPIKey)
+		if siteURL != "" {
+			req.Header.Set("HTTP-Referer", siteURL)
 		}
-	}
-	if seq > 0 {
-		if err := writer.WriteField("seq", fmt.Sprintf("%d", seq)); err != nil {
-			return fmt.Errorf("не удалось добавить seq: %w", err)
+		if siteTitle != "" {
+			req.Header.Set("X-Title", siteTitle)
 		}
-	}
 
-	if seeker, ok := file.(io.Seeker); ok {
-		seeker.Seek(0, 0)
-	}
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			publishProcessingResult("Ошибка запроса к модели: "+err.Error(), "error", batchID, seq, "")
+			return
+		}
+		defer resp.Body.Close()
 
-	part, err := writer.CreateFormFile("file", fileName)
-	if err != nil {
-		return fmt.Errorf("не удалось создать поле для файла: %w", err)
-	}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			body, _ := io.ReadAll(resp.Body)
+			publishProcessingResult(fmt.Sprintf("Модель вернула ошибку %d: %s", resp.StatusCode, truncateString(string(body), 800)), "error", batchID, seq, "")
+			return
+		}
 
-	if _, err := io.Copy(part, file); err != nil {
-		return fmt.Errorf("не удалось скопировать файл: %w", err)
-	}
+		var cr chatResponse
+		if err := json.NewDecoder(resp.Body).Decode(&cr); err != nil {
+			publishProcessingResult("Не удалось разобрать ответ модели", "error", batchID, seq, "")
+			return
+		}
+		var answer string
+		if len(cr.Choices) > 0 {
+			answer = strings.TrimSpace(cr.Choices[0].Message.Content)
+		}
+		if answer == "" {
+			answer = "Модель не вернула содержимое ответа"
+		}
 
-	if err := writer.Close(); err != nil {
-		return fmt.Errorf("ошибка закрытия writer: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", n8nWebhookURL, &buffer)
-	if err != nil {
-		return fmt.Errorf("не удалось создать запрос: %w", err)
-	}
-
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("ошибка отправки в n8n: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("n8n вернул ошибку %d: %s", resp.StatusCode, string(body))
-	}
+		publishProcessingResult(answer, "completed", batchID, seq, "")
+	}(reqBody, batchID, seq)
 
 	return nil
+}
+
+// publishProcessingResult сохраняет результат и оповещает подписчиков SSE
+func publishProcessingResult(text, status, batchID string, seq int, download string) {
+	resp := ProcessingResponse{
+		ID:        generateSimpleID(),
+		Text:      text,
+		Timestamp: time.Now(),
+		Status:    status,
+		Download:  download,
+		BatchID:   batchID,
+		Seq:       seq,
+	}
+
+	responsesMutex.Lock()
+	responses = append(responses, resp)
+	if len(responses) > maxResponses {
+		responses = responses[len(responses)-maxResponses:]
+	}
+	responsesMutex.Unlock()
+
+	go func(rp ProcessingResponse) {
+		subscribersMux.RLock()
+		for ch := range subscribers {
+			select {
+			case ch <- rp:
+			default:
+			}
+		}
+		subscribersMux.RUnlock()
+	}(resp)
+}
+
+// extractDocumentText извлекает текст: PDF через pdftotext, изображения через tesseract. Возвращает текст или ошибку.
+func extractDocumentText(fileBytes []byte, fileName, contentType string) (string, error) {
+	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(fileName), "."))
+	// Создадим временный файл с правильным расширением
+	suffix := "." + ext
+	if ext == "" {
+		// по contentType
+		if strings.Contains(contentType, "pdf") {
+			suffix = ".pdf"
+		} else if strings.Contains(contentType, "png") {
+			suffix = ".png"
+		} else if strings.Contains(contentType, "jpeg") || strings.Contains(contentType, "jpg") {
+			suffix = ".jpg"
+		} else {
+			suffix = ".bin"
+		}
+	}
+
+	f, err := os.CreateTemp("", "docai_*"+suffix)
+	if err != nil {
+		return "", err
+	}
+	tmpPath := f.Name()
+	_, werr := f.Write(fileBytes)
+	cerr := f.Close()
+	if werr != nil {
+		os.Remove(tmpPath)
+		return "", werr
+	}
+	if cerr != nil {
+		os.Remove(tmpPath)
+		return "", cerr
+	}
+	defer os.Remove(tmpPath)
+
+	// Выбор стратегии
+	if strings.HasSuffix(tmpPath, ".pdf") {
+		return extractTextWithPdftotext(tmpPath)
+	}
+	if strings.HasSuffix(tmpPath, ".jpg") || strings.HasSuffix(tmpPath, ".jpeg") || strings.HasSuffix(tmpPath, ".png") {
+		return ocrWithTesseract(tmpPath)
+	}
+	return "", fmt.Errorf("неподдерживаемый тип файла для извлечения текста")
+}
+
+func extractTextWithPdftotext(pdfPath string) (string, error) {
+	// Требуется утилита pdftotext (poppler-utils). Выводим в stdout.
+	cmd := exec.Command("pdftotext", "-enc", "UTF-8", pdfPath, "-")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("pdftotext error: %w", err)
+	}
+	return string(out), nil
+}
+
+func ocrWithTesseract(imgPath string) (string, error) {
+	// Требуется утилита tesseract. Печатает результат в stdout. Языки: rus+eng (можно изменить через env)
+	lang := strings.TrimSpace(os.Getenv("OCR_LANGS"))
+	if lang == "" {
+		lang = "rus+eng"
+	}
+	cmd := exec.Command("tesseract", imgPath, "stdout", "-l", lang, "--psm", "3")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("tesseract error: %w", err)
+	}
+	return string(out), nil
 }
 
 func isValidFileType(filename string) bool {

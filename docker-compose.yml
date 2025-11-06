@@ -13,7 +13,12 @@ services:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - SESSION_SECRET=${SESSION_SECRET}
       - DATABASE_URL=${DATABASE_URL}
-      - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL}
+      - QWEN_MODEL=${QWEN_MODEL}
+      - SITE_URL=${SITE_URL}
+      - SITE_TITLE=${SITE_TITLE}
+      - OCR_LANGS=${OCR_LANGS}
     volumes:
       # Для логов (опционально)
       - ./logs:/app/logs

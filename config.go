@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -18,6 +19,12 @@ var (
 	dbDSN         string
 	adminEmail    string
 	adminPassword string
+	// OpenRouter / Qwen
+	openRouterAPIKey  string
+	openRouterBaseURL string
+	qwenModel         string
+	siteURL           string
+	siteTitle         string
 )
 
 func initEnvVariables() {
@@ -74,4 +81,17 @@ func initEnvVariables() {
 
 	adminEmail = os.Getenv("ADMIN_EMAIL")
 	adminPassword = os.Getenv("ADMIN_PASSWORD")
+
+	// OpenRouter / Qwen
+	openRouterAPIKey = strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY"))
+	openRouterBaseURL = strings.TrimSpace(os.Getenv("OPENROUTER_BASE_URL"))
+	if openRouterBaseURL == "" {
+		openRouterBaseURL = "https://openrouter.ai/api/v1"
+	}
+	qwenModel = strings.TrimSpace(os.Getenv("QWEN_MODEL"))
+	if qwenModel == "" {
+		qwenModel = "qwen/qwen3-235b-a22b-2507"
+	}
+	siteURL = strings.TrimSpace(os.Getenv("SITE_URL"))
+	siteTitle = strings.TrimSpace(os.Getenv("SITE_TITLE"))
 }

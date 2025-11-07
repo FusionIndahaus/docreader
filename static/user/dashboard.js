@@ -84,10 +84,28 @@ class UserDashboard {
 
     displaySubscriptionInfo(subscriptionData) {
         document.getElementById('subscriptionStatus').textContent = subscriptionData.status || 'Неизвестно';
-        document.getElementById('subscriptionPeriod').textContent = 
-            `${subscriptionData.period_start} - ${subscriptionData.period_end}`;
+        document.getElementById('subscriptionPeriod').textContent =
+            `с ${this.formatDate(subscriptionData.period_start)} до ${this.formatDate(subscriptionData.period_end)}`;
         document.getElementById('subscriptionQuota').textContent = subscriptionData.quota_total || '0';
         document.getElementById('usageCount').textContent = subscriptionData.usage_count || '0';
+    }
+
+    formatDate(dateString) {
+        if (!dateString) {
+            return '—';
+        }
+
+        const date = new Date(dateString);
+
+        if (Number.isNaN(date.getTime())) {
+            return dateString;
+        }
+
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+
+        return `${day}.${month}.${year}`;
     }
 
     async loadUploadHistory() {

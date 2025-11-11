@@ -509,14 +509,19 @@ func handleUserHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if db == nil {
-		sendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
-		return
-	}
+	email := strings.ToLower(userSessions[c.Value])
 
 	// Получаем историю из глобального массива responses, фильтруя по пользователю
 	responsesMutex.RLock()
-	userHistory := append([]ProcessingResponse{}, responses...)
+	userHistory := make([]ProcessingResponse, 0, len(responses))
+	for _, resp := range responses {
+		if resp.UserEmail == "" {
+			continue
+		}
+		if strings.EqualFold(resp.UserEmail, email) {
+			userHistory = append(userHistory, resp)
+		}
+	}
 	responsesMutex.RUnlock()
 
 	// Ограничиваем количество записей

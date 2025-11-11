@@ -10,6 +10,7 @@ type ProcessingResponse struct {
 	Download  string    `json:"download,omitempty"`
 	BatchID   string    `json:"batchId,omitempty"`
 	Seq       int       `json:"seq,omitempty"`
+	UserEmail string    `json:"user_email,omitempty"`
 }
 
 type APIResponse struct {

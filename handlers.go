@@ -79,6 +79,13 @@ func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 		outputFormat = "json"
 	}
 
+	userEmail := ""
+	if c, err := r.Cookie("user_session"); err == nil && c.Value != "" {
+		if email := userSessions[c.Value]; email != "" {
+			userEmail = strings.ToLower(email)
+		}
+	}
+
 	// Считываем список колонок 1С (через запятую) — временно не используется
 
 	// Параметры батча (необязательные)
@@ -122,7 +129,7 @@ func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := startQwenProcessing(message, header.Filename, contentType, outputFormat, batchID, seq, fileBytes); err != nil {
+	if err := startQwenProcessing(message, header.Filename, contentType, outputFormat, batchID, seq, fileBytes, userEmail); err != nil {
 		log.Printf("ERROR: Ошибка запуска обработки через Qwen: %v", err)
 		sendJSONError(w, "Не удалось обработать документ: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -561,7 +568,7 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 // sendToN8n — удалено (миграция на Qwen/OpenRouter)
 
 // startQwenProcessing запускает асинхронный запрос в Qwen через OpenRouter и публикует результат через SSE
-func startQwenProcessing(message string, fileName string, contentType string, outputFormat string, batchID string, seq int, fileBytes []byte) error {
+func startQwenProcessing(message string, fileName string, contentType string, outputFormat string, batchID string, seq int, fileBytes []byte, userEmail string) error {
 	if strings.TrimSpace(openRouterAPIKey) == "" {
 		return fmt.Errorf("не задан OPENROUTER_API_KEY")
 	}
@@ -623,14 +630,14 @@ func startQwenProcessing(message string, fileName string, contentType string, ou
 	}
 
 	// Делаем запрос в фоне и публикуем результат
-	go func(rb chatRequest, batchID string, seq int) {
+	go func(rb chatRequest, batchID string, seq int, userEmail string) {
 		// Подготовим HTTP-запрос
 		buf, _ := json.Marshal(rb)
 		httpClient := &http.Client{Timeout: 60 * time.Second}
 		endpoint := strings.TrimRight(openRouterBaseURL, "/") + "/chat/completions"
 		req, err := http.NewRequest("POST", endpoint, bytes.NewReader(buf))
 		if err != nil {
-			publishProcessingResult("Не удалось сформировать запрос к модели", "error", batchID, seq, "")
+			publishProcessingResult("Не удалось сформировать запрос к модели", "error", batchID, seq, "", userEmail)
 			return
 		}
 		req.Header.Set("Content-Type", "application/json")
@@ -644,20 +651,20 @@ func startQwenProcessing(message string, fileName string, contentType string, ou
 
 		resp, err := httpClient.Do(req)
 		if err != nil {
-			publishProcessingResult("Ошибка запроса к модели: "+err.Error(), "error", batchID, seq, "")
+			publishProcessingResult("Ошибка запроса к модели: "+err.Error(), "error", batchID, seq, "", userEmail)
 			return
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			body, _ := io.ReadAll(resp.Body)
-			publishProcessingResult(fmt.Sprintf("Модель вернула ошибку %d: %s", resp.StatusCode, truncateString(string(body), 800)), "error", batchID, seq, "")
+			publishProcessingResult(fmt.Sprintf("Модель вернула ошибку %d: %s", resp.StatusCode, truncateString(string(body), 800)), "error", batchID, seq, "", userEmail)
 			return
 		}
 
 		var cr chatResponse
 		if err := json.NewDecoder(resp.Body).Decode(&cr); err != nil {
-			publishProcessingResult("Не удалось разобрать ответ модели", "error", batchID, seq, "")
+			publishProcessingResult("Не удалось разобрать ответ модели", "error", batchID, seq, "", userEmail)
 			return
 		}
 		var answer string
@@ -668,14 +675,14 @@ func startQwenProcessing(message string, fileName string, contentType string, ou
 			answer = "Модель не вернула содержимое ответа"
 		}
 
-		publishProcessingResult(answer, "completed", batchID, seq, "")
-	}(reqBody, batchID, seq)
+		publishProcessingResult(answer, "completed", batchID, seq, "", userEmail)
+	}(reqBody, batchID, seq, userEmail)
 
 	return nil
 }
 
 // publishProcessingResult сохраняет результат и оповещает подписчиков SSE
-func publishProcessingResult(text, status, batchID string, seq int, download string) {
+func publishProcessingResult(text, status, batchID string, seq int, download string, userEmail string) {
 	resp := ProcessingResponse{
 		ID:        generateSimpleID(),
 		Text:      text,
@@ -684,6 +691,7 @@ func publishProcessingResult(text, status, batchID string, seq int, download str
 		Download:  download,
 		BatchID:   batchID,
 		Seq:       seq,
+		UserEmail: userEmail,
 	}
 
 	responsesMutex.Lock()

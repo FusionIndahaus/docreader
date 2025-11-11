@@ -10,18 +10,31 @@ import (
 )
 
 func setupRoutes() {
-	// Static files with guard for index.html
+	// Static files with guard for protected pages
 	fs := http.StripPrefix("/static/", http.FileServer(http.Dir(staticDir)))
 	http.HandleFunc("/static/", func(w http.ResponseWriter, r *http.Request) {
-		// protect index pages under /static when not authenticated
-		if r.URL.Path == "/static/" || strings.HasSuffix(r.URL.Path, "/index.html") || strings.HasSuffix(r.URL.Path, "index.html") {
+		path := r.URL.Path
+
+		// Защищаем главную страницу (index.html)
+		if path == "/static/" || path == "/static/index.html" || strings.HasSuffix(path, "/index.html") {
 			if c, err := r.Cookie("admin_session"); !(err == nil && c.Value != "" && adminSessions[c.Value] != "") {
-				if c2, err2 := r.Cookie("user_session"); !(err2 == nil && c2.Value != "" && userSessions[c2.Value] != "") {
+				if c2, err2 := r.Cookie("user_session"); !(err2 == nil && c2.Value != "" && getUserEmail(c2.Value) != "") {
 					http.Redirect(w, r, "/static/user/login.html", http.StatusFound)
 					return
 				}
 			}
 		}
+
+		// Защищаем все HTML-файлы в /static/user/ кроме login.html
+		if strings.HasPrefix(path, "/static/user/") && strings.HasSuffix(path, ".html") && !strings.HasSuffix(path, "login.html") {
+			if c, err := r.Cookie("admin_session"); !(err == nil && c.Value != "" && adminSessions[c.Value] != "") {
+				if c2, err2 := r.Cookie("user_session"); !(err2 == nil && c2.Value != "" && getUserEmail(c2.Value) != "") {
+					http.Redirect(w, r, "/static/user/login.html", http.StatusFound)
+					return
+				}
+			}
+		}
+
 		fs.ServeHTTP(w, r)
 	})
 
@@ -36,18 +49,25 @@ func setupRoutes() {
 			handleHome(w, r)
 			return
 		}
-		if c, err := r.Cookie("user_session"); err == nil && c.Value != "" && userSessions[c.Value] != "" {
+		if c, err := r.Cookie("user_session"); err == nil && c.Value != "" && getUserEmail(c.Value) != "" {
 			handleHome(w, r)
 			return
 		}
 		http.Redirect(w, r, "/static/user/login.html", http.StatusFound)
 	})
-	http.HandleFunc("/upload", handleFileUpload)
+	// API endpoints - требуют авторизации пользователя (или админа)
+	http.HandleFunc("/upload", requireUserOrAdmin(handleFileUpload))
+	http.HandleFunc("/results", handleGetResults) // уже защищен внутри функции
+	http.HandleFunc("/events", handleEvents)      // проверка внутри функции
+
+	// Webhook от n8n - доступен без авторизации (внешний сервис)
 	http.HandleFunc("/webhook", handleN8nWebhook)
-	http.HandleFunc("/results", handleGetResults)
-	http.HandleFunc("/events", handleEvents)
+
+	// Health check - доступен всем
 	http.HandleFunc("/health", handleHealthCheck)
-	http.HandleFunc("/download", handleDownload)
+
+	// Download - требует авторизацию
+	http.HandleFunc("/download", requireUserOrAdmin(handleDownload))
 	http.Handle("/swagger/", httpSwagger.WrapHandler)
 
 	// Admin API

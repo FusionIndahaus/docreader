@@ -210,28 +210,58 @@ func TestHandleN8nWebhookValid(t *testing.T) {
 }
 
 func TestHandleGetResults(t *testing.T) {
+	// Настраиваем тестовые данные
+	testUserEmail := "test@example.com"
+	testSessionToken := "test-session-token-123"
+
+	// Сохраняем оригинальные данные
 	responsesMutex.Lock()
 	originalResponses := responses
 	responses = []ProcessingResponse{
 		{
 			ID:        "test-1",
-			Text:      "Тестовый документ",
+			Text:      "Тестовый документ пользователя",
 			Timestamp: time.Now(),
 			Status:    "completed",
+			UserEmail: testUserEmail,
+		},
+		{
+			ID:        "test-2",
+			Text:      "Документ другого пользователя",
+			Timestamp: time.Now(),
+			Status:    "completed",
+			UserEmail: "other@example.com",
+		},
+		{
+			ID:        "test-3",
+			Text:      "Еще один документ пользователя",
+			Timestamp: time.Now(),
+			Status:    "completed",
+			UserEmail: testUserEmail,
 		},
 	}
 	responsesMutex.Unlock()
+
+	// Настраиваем тестовую сессию
+	setUserSession(testSessionToken, testUserEmail)
 
 	defer func() {
 		responsesMutex.Lock()
 		responses = originalResponses
 		responsesMutex.Unlock()
+		deleteUserSession(testSessionToken)
 	}()
 
 	req, err := http.NewRequest("GET", "/results", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Добавляем cookie с сессией
+	req.AddCookie(&http.Cookie{
+		Name:  "user_session",
+		Value: testSessionToken,
+	})
 
 	rr := httptest.NewRecorder()
 	handler := http.HandlerFunc(handleGetResults)
@@ -250,6 +280,50 @@ func TestHandleGetResults(t *testing.T) {
 
 	if response.Status != "success" {
 		t.Errorf("Неожиданный статус: получен %v, ожидался 'success'", response.Status)
+	}
+
+	// Проверяем, что возвращены только результаты текущего пользователя
+	resultsJSON, _ := json.Marshal(response.Data)
+	var resultsArray []ProcessingResponse
+	if err := json.Unmarshal(resultsJSON, &resultsArray); err != nil {
+		t.Errorf("Не удалось распарсить результаты: %v", err)
+		return
+	}
+	if len(resultsArray) != 2 {
+		t.Errorf("Ожидалось 2 результата для пользователя, получено %d", len(resultsArray))
+	}
+	for _, resp := range resultsArray {
+		if !strings.EqualFold(resp.UserEmail, testUserEmail) {
+			t.Errorf("Возвращен результат для другого пользователя: %s (ожидался %s)", resp.UserEmail, testUserEmail)
+		}
+	}
+}
+
+func TestHandleGetResultsUnauthorized(t *testing.T) {
+	req, err := http.NewRequest("GET", "/results", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Не добавляем cookie - пользователь не авторизован
+
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(handleGetResults)
+
+	handler.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusUnauthorized {
+		t.Errorf("handler вернул неправильный статус код: получен %v, ожидался %v",
+			status, http.StatusUnauthorized)
+	}
+
+	var response APIResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+		t.Errorf("Не удалось распарсить JSON ответ: %v", err)
+	}
+
+	if response.Status != "error" {
+		t.Errorf("Неожиданный статус: получен %v, ожидался 'error'", response.Status)
 	}
 }
 

@@ -81,7 +81,7 @@ func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 
 	userEmail := ""
 	if c, err := r.Cookie("user_session"); err == nil && c.Value != "" {
-		if email := userSessions[c.Value]; email != "" {
+		if email := getUserEmail(c.Value); email != "" {
 			userEmail = strings.ToLower(email)
 		}
 	}
@@ -416,6 +416,15 @@ func handleEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Определяем email пользователя из сессии для фильтрации событий
+	var userEmail string
+	c, err := r.Cookie("user_session")
+	if err == nil && c.Value != "" {
+		if email := userSessions[c.Value]; email != "" {
+			userEmail = strings.ToLower(email)
+		}
+	}
+
 	ch := make(chan ProcessingResponse, 1)
 
 	// Регистрируем подписчика
@@ -436,26 +445,38 @@ func handleEvents(w http.ResponseWriter, r *http.Request) {
 		subscribersMux.Unlock()
 	}()
 
-	// Отправим последние результаты сразу при подключении
-	responsesMutex.RLock()
-	snapshot := make([]ProcessingResponse, len(responses))
-	copy(snapshot, responses)
-	responsesMutex.RUnlock()
-	for _, resp := range snapshot {
-		fmt.Fprintf(w, "data: %s\n\n", toJSON(resp))
+	// Отправим последние результаты сразу при подключении (фильтруем по пользователю)
+	if userEmail != "" {
+		responsesMutex.RLock()
+		snapshot := make([]ProcessingResponse, 0, len(responses))
+		for _, resp := range responses {
+			if resp.UserEmail != "" && strings.EqualFold(resp.UserEmail, userEmail) {
+				snapshot = append(snapshot, resp)
+			}
+		}
+		responsesMutex.RUnlock()
+		for _, resp := range snapshot {
+			fmt.Fprintf(w, "data: %s\n\n", toJSON(resp))
+		}
+		flusher.Flush()
 	}
-	flusher.Flush()
 
 	// Heartbeat, чтобы соединение не простаивало и не обрывалось прокси
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 
-	// Основной цикл отправки событий
+	// Основной цикл отправки событий (фильтруем по пользователю)
 	for {
 		select {
 		case resp, ok := <-ch:
 			if !ok {
 				return
+			}
+			// Отправляем только события, относящиеся к текущему пользователю
+			if userEmail != "" && resp.UserEmail != "" {
+				if !strings.EqualFold(resp.UserEmail, userEmail) {
+					continue
+				}
 			}
 			fmt.Fprintf(w, "data: %s\n\n", toJSON(resp))
 			flusher.Flush()
@@ -477,20 +498,42 @@ func toJSON(v interface{}) string {
 
 // handleGetResults godoc
 // @Summary Получить список результатов
-// @Description Возвращает последние результаты обработки документов
+// @Description Возвращает последние результаты обработки документов пользователя
 // @Tags results
 // @Produce json
 // @Success 200 {object} APIResponse
+// @Failure 401 {object} APIResponse
 // @Router /results [get]
 func handleGetResults(w http.ResponseWriter, r *http.Request) {
+	// Проверяем сессию пользователя
+	c, err := r.Cookie("user_session")
+	if err != nil || c.Value == "" {
+		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	email := strings.ToLower(getUserEmail(c.Value))
+	if email == "" {
+		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Получаем результаты из глобального массива responses, фильтруя по пользователю
 	responsesMutex.RLock()
-	data := make([]ProcessingResponse, len(responses))
-	copy(data, responses)
+	userResults := make([]ProcessingResponse, 0, len(responses))
+	for _, resp := range responses {
+		if resp.UserEmail == "" {
+			continue
+		}
+		if strings.EqualFold(resp.UserEmail, email) {
+			userResults = append(userResults, resp)
+		}
+	}
 	responsesMutex.RUnlock()
 
 	sendJSONResponse(w, APIResponse{
 		Status: "success",
-		Data:   data,
+		Data:   userResults,
 	})
 }
 

@@ -11,5 +11,8 @@ var (
 	subscribers    map[chan ProcessingResponse]struct{}
 	subscribersMux sync.RWMutex
 
+	userSessions    = map[string]string{}
+	userSessionsMux sync.RWMutex
+
 	db *sql.DB
 )

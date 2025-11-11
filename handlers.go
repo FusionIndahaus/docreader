@@ -81,7 +81,7 @@ func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 
 	userEmail := ""
 	if c, err := r.Cookie("user_session"); err == nil && c.Value != "" {
-		if email := userSessions[c.Value]; email != "" {
+		if email := getUserEmail(c.Value); email != "" {
 			userEmail = strings.ToLower(email)
 		}
 	}
@@ -507,12 +507,16 @@ func toJSON(v interface{}) string {
 func handleGetResults(w http.ResponseWriter, r *http.Request) {
 	// Проверяем сессию пользователя
 	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || userSessions[c.Value] == "" {
+	if err != nil || c.Value == "" {
 		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	email := strings.ToLower(userSessions[c.Value])
+	email := strings.ToLower(getUserEmail(c.Value))
+	if email == "" {
+		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 
 	// Получаем результаты из глобального массива responses, фильтруя по пользователю
 	responsesMutex.RLock()

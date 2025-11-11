@@ -8,8 +8,28 @@ import (
 	"time"
 )
 
-// сессии пользователей: token -> customerEmail
-var userSessions = map[string]string{}
+// userSessions перемещен в state.go для синхронизации доступа
+
+// getUserEmail безопасно получает email пользователя по токену сессии
+func getUserEmail(token string) string {
+	userSessionsMux.RLock()
+	defer userSessionsMux.RUnlock()
+	return userSessions[token]
+}
+
+// setUserSession безопасно устанавливает сессию пользователя
+func setUserSession(token, email string) {
+	userSessionsMux.Lock()
+	defer userSessionsMux.Unlock()
+	userSessions[token] = email
+}
+
+// deleteUserSession безопасно удаляет сессию пользователя
+func deleteUserSession(token string) {
+	userSessionsMux.Lock()
+	defer userSessionsMux.Unlock()
+	delete(userSessions, token)
+}
 
 func handleUserLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -49,7 +69,7 @@ func handleUserLogin(w http.ResponseWriter, r *http.Request) {
 		sendJSONError(w, "session error", http.StatusInternalServerError)
 		return
 	}
-	userSessions[token] = email
+	setUserSession(token, email)
 	cookie := &http.Cookie{
 		Name:     "user_session",
 		Value:    token,
@@ -66,7 +86,7 @@ func handleUserLogin(w http.ResponseWriter, r *http.Request) {
 func handleUserLogout(w http.ResponseWriter, r *http.Request) {
 	c, err := r.Cookie("user_session")
 	if err == nil && c.Value != "" {
-		delete(userSessions, c.Value)
+		deleteUserSession(c.Value)
 		c.Expires = time.Unix(0, 0)
 		c.MaxAge = -1
 		http.SetCookie(w, c)
@@ -77,11 +97,29 @@ func handleUserLogout(w http.ResponseWriter, r *http.Request) {
 func requireUser(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		c, err := r.Cookie("user_session")
-		if err != nil || c.Value == "" || userSessions[c.Value] == "" {
+		if err != nil || c.Value == "" || getUserEmail(c.Value) == "" {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 		next(w, r)
+	}
+}
+
+// requireUserOrAdmin проверяет авторизацию пользователя или админа
+func requireUserOrAdmin(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Проверяем админскую сессию
+		if c, err := r.Cookie("admin_session"); err == nil && c.Value != "" && adminSessions[c.Value] != "" {
+			next(w, r)
+			return
+		}
+		// Проверяем пользовательскую сессию
+		if c, err := r.Cookie("user_session"); err == nil && c.Value != "" && getUserEmail(c.Value) != "" {
+			next(w, r)
+			return
+		}
+		// Не авторизован
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
 	}
 }
 
@@ -106,12 +144,16 @@ func handleUserProfile(w http.ResponseWriter, r *http.Request) {
 
 func handleUserProfileGet(w http.ResponseWriter, r *http.Request) {
 	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || userSessions[c.Value] == "" {
+	if err != nil || c.Value == "" {
 		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	email := userSessions[c.Value]
+	email := getUserEmail(c.Value)
+	if email == "" {
+		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	if db == nil {
 		sendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
@@ -147,12 +189,16 @@ func handleUserProfileGet(w http.ResponseWriter, r *http.Request) {
 
 func handleUserProfileUpdate(w http.ResponseWriter, r *http.Request) {
 	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || userSessions[c.Value] == "" {
+	if err != nil || c.Value == "" {
 		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	email := userSessions[c.Value]
+	email := getUserEmail(c.Value)
+	if email == "" {
+		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	if db == nil {
 		sendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
@@ -206,12 +252,16 @@ func handleUserSettings(w http.ResponseWriter, r *http.Request) {
 
 func handleUserSettingsGet(w http.ResponseWriter, r *http.Request) {
 	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || userSessions[c.Value] == "" {
+	if err != nil || c.Value == "" {
 		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	email := userSessions[c.Value]
+	email := getUserEmail(c.Value)
+	if email == "" {
+		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	if db == nil {
 		sendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
@@ -255,12 +305,16 @@ func handleUserSettingsGet(w http.ResponseWriter, r *http.Request) {
 
 func handleUserSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || userSessions[c.Value] == "" {
+	if err != nil || c.Value == "" {
 		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	email := userSessions[c.Value]
+	email := getUserEmail(c.Value)
+	if email == "" {
+		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	if db == nil {
 		sendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
@@ -363,12 +417,16 @@ func handleUserChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || userSessions[c.Value] == "" {
+	if err != nil || c.Value == "" {
 		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	email := userSessions[c.Value]
+	email := getUserEmail(c.Value)
+	if email == "" {
+		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	if db == nil {
 		sendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
@@ -447,12 +505,16 @@ func handleUserChangePassword(w http.ResponseWriter, r *http.Request) {
 // @Router /user/subscription [get]
 func handleUserSubscription(w http.ResponseWriter, r *http.Request) {
 	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || userSessions[c.Value] == "" {
+	if err != nil || c.Value == "" {
 		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	email := userSessions[c.Value]
+	email := getUserEmail(c.Value)
+	if email == "" {
+		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	if db == nil {
 		sendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
@@ -504,12 +566,16 @@ func handleUserSubscription(w http.ResponseWriter, r *http.Request) {
 // @Router /user/history [get]
 func handleUserHistory(w http.ResponseWriter, r *http.Request) {
 	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || userSessions[c.Value] == "" {
+	if err != nil || c.Value == "" {
 		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	email := strings.ToLower(userSessions[c.Value])
+	email := strings.ToLower(getUserEmail(c.Value))
+	if email == "" {
+		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 
 	// Получаем историю из глобального массива responses, фильтруя по пользователю
 	responsesMutex.RLock()
@@ -545,12 +611,16 @@ func handleUserHistory(w http.ResponseWriter, r *http.Request) {
 // @Router /user/usage-stats [get]
 func handleUserUsageStats(w http.ResponseWriter, r *http.Request) {
 	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || userSessions[c.Value] == "" {
+	if err != nil || c.Value == "" {
 		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	email := userSessions[c.Value]
+	email := getUserEmail(c.Value)
+	if email == "" {
+		sendJSONError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	if db == nil {
 		sendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return

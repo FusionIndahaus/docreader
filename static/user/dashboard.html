@@ -1,20 +1,27 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Личный кабинет - Document AI</title>
+    <title>Личный кабинет - Автобухгалтер</title>
+    <link rel="stylesheet" href="/static/main-general.css">
+    <link rel="stylesheet" href="/static/main-light.css">
+    <link rel="stylesheet" href="/static/main-dark.css">
     <link rel="stylesheet" href="/static/user/styles.css">
-    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/static/user/styles-dashboard-light.css">
+    <link rel="stylesheet" href="/static/user/styles-dashboard-dark.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+    <div class="background-effects" aria-hidden="true"></div>
     <div class="container dashboard-container">
         <header class="header">
             <div class="header-content">
-                <h1>Document AI</h1>
+                <h1>АВТОБУХГАЛТЕР</h1>
                 <nav class="nav">
                     <a href="/" class="nav-link">Главная</a>
-                    <a href="/user/dashboard" class="nav-link active">Личный кабинет</a>
                     <button id="logoutBtn" class="btn btn-secondary">Выйти</button>
                     
                     <!-- Theme switcher в навигации -->
@@ -32,10 +39,6 @@
 
         <main class="main">
             <!-- Личный кабинет - полноширинный блок -->
-            <div class="card dashboard-welcome">
-                <h2>Личный кабинет</h2>
-                <p>Добро пожаловать, <span id="userName">Пользователь</span>!</p>
-            </div>
 
             <div class="dashboard-content">
                     <!-- Информация о подписке -->
@@ -77,29 +80,28 @@
                         </div>
                     </div>
 
-                    <!-- Смена пароля -->
+                    <!-- Статистика использования -->
                     <div class="card">
-                        <h3>Смена пароля</h3>
-                        <div class="password-form">
-                            <div class="form-group">
-                                <label for="currentPassword">Текущий пароль:</label>
-                                <input type="password" id="currentPassword">
+                        <h3>Статистика использования</h3>
+                        <div class="usage-stats">
+                            <div class="stat-item">
+                                <span class="stat-label">Всего обработано:</span>
+                                <span id="totalProcessed" class="stat-value">0</span>
                             </div>
-                            <div class="form-group">
-                                <label for="newPassword">Новый пароль:</label>
-                                <input type="password" id="newPassword">
+                            <div class="stat-item">
+                                <span class="stat-label">За последний месяц:</span>
+                                <span id="monthlyProcessed" class="stat-value">0</span>
                             </div>
-                            <div class="form-group">
-                                <label for="confirmPassword">Подтвердите новый пароль:</label>
-                                <input type="password" id="confirmPassword">
+                            <div class="stat-item">
+                                <span class="stat-label">Осталось квоты:</span>
+                                <span id="remainingQuota" class="stat-value">0</span>
                             </div>
-                            <button id="changePasswordBtn" class="btn btn-primary">Изменить пароль</button>
                         </div>
                     </div>
 
                     <!-- Настройки форматов -->
                     <div class="card">
-                        <h3>Настройки отображения форматов</h3>
+                        <h3>Настройки форматов</h3>
                         <p>Выберите, какие форматы результата будут отображаться на главной странице:</p>
                         <div class="settings-form">
                             <div class="form-group checkbox-group">
@@ -130,22 +132,23 @@
                         </div>
                     </div>
 
-                    <!-- Статистика использования -->
+                    <!-- Смена пароля -->
                     <div class="card">
-                        <h3>Статистика использования</h3>
-                        <div class="usage-stats">
-                            <div class="stat-item">
-                                <span class="stat-label">Всего обработано:</span>
-                                <span id="totalProcessed" class="stat-value">0</span>
+                        <h3>Смена пароля</h3>
+                        <div class="password-form">
+                            <div class="form-group">
+                                <label for="currentPassword">Текущий пароль:</label>
+                                <input type="password" id="currentPassword">
                             </div>
-                            <div class="stat-item">
-                                <span class="stat-label">За последний месяц:</span>
-                                <span id="monthlyProcessed" class="stat-value">0</span>
+                            <div class="form-group">
+                                <label for="newPassword">Новый пароль:</label>
+                                <input type="password" id="newPassword">
                             </div>
-                            <div class="stat-item">
-                                <span class="stat-label">Осталось квоты:</span>
-                                <span id="remainingQuota" class="stat-value">0</span>
+                            <div class="form-group">
+                                <label for="confirmPassword">Подтвердите новый пароль:</label>
+                                <input type="password" id="confirmPassword">
                             </div>
+                            <button id="changePasswordBtn" class="btn btn-primary">Изменить пароль</button>
                         </div>
                     </div>
             </div>

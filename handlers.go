@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -129,8 +130,8 @@ func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := startQwenProcessing(message, header.Filename, contentType, outputFormat, batchID, seq, fileBytes, userEmail); err != nil {
-		log.Printf("ERROR: Ошибка запуска обработки через Qwen: %v", err)
+	if err := startLLMProcessing(message, header.Filename, contentType, batchID, seq, fileBytes, userEmail); err != nil {
+		log.Printf("ERROR: Ошибка запуска обработки через LLM: %v", err)
 		sendJSONError(w, "Не удалось обработать документ: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -610,15 +611,23 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 
 // sendToN8n — удалено (миграция на Qwen/OpenRouter)
 
-// startQwenProcessing запускает асинхронный запрос в Qwen через OpenRouter и публикует результат через SSE
-func startQwenProcessing(message string, fileName string, contentType string, outputFormat string, batchID string, seq int, fileBytes []byte, userEmail string) error {
+// startLLMProcessing запускает асинхронный запрос к модели OpenRouter и публикует результат через SSE
+func startLLMProcessing(message string, fileName string, contentType string, batchID string, seq int, fileBytes []byte, userEmail string) error {
 	if strings.TrimSpace(openRouterAPIKey) == "" {
 		return fmt.Errorf("не задан OPENROUTER_API_KEY")
 	}
 
+	type imageURL struct {
+		Url string `json:"url"`
+	}
+	type contentPart struct {
+		Type     string    `json:"type"`
+		Text     string    `json:"text,omitempty"`
+		ImageURL *imageURL `json:"image_url,omitempty"`
+	}
 	type chatMessage struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
+		Role    string        `json:"role"`
+		Content []contentPart `json:"content"`
 	}
 	type chatRequest struct {
 		Model    string        `json:"model"`
@@ -636,39 +645,45 @@ func startQwenProcessing(message string, fileName string, contentType string, ou
 		Choices []choice `json:"choices"`
 	}
 
-	// Извлечём текст из документа (PDF -> текст, JPG/PNG -> OCR). Ошибки не фатальны — продолжим без текста.
-	docText, _ := extractDocumentText(fileBytes, fileName, contentType)
+	// Системная инструкция для экстракции конкретных значений (по требованию)
+	systemContent := `You are an assistant for extracting specific data from documents. 
+Return ONLY the exact values explicitly requested by the user. 
+For each requested value, output ONLY ONE line with the most suitable result. 
+Do not output all similar values you see - choose only the single most appropriate one for each category which user want to exctract. 
+The output must contain raw values separated by new lines, 
+without quotes, equals signs, labels, explanations, or extra commentary. 
+If a requested value is missing, output the word MISSING on its own line. 
+Never invent or add information beyond what the user asked for.`
 
-	// Подготовим промпт.
-	var formatHint string
-	switch strings.ToLower(strings.TrimSpace(outputFormat)) {
-	case "json":
-		formatHint = "Верни ТОЛЬКО валидный JSON без комментариев и пояснений. Используй корректный JSON, без лишних полей."
-	case "csv":
-		formatHint = "Верни ТОЛЬКО CSV-текст с первой строкой-заголовком и данными, без комментариев и пояснений. Разделитель — запятая. Экранируй кавычками поля с запятыми."
-	case "xlsx":
-		formatHint = "Верни таблицу в виде ТОЛЬКО CSV-текста (позже конвертируем в XLSX). Первая строка — заголовки."
-	default:
-		formatHint = "Верни краткий и конкретный ответ."
-	}
-
-	var docBlock string
-	if strings.TrimSpace(docText) != "" {
-		// Ограничим объём текста, чтобы не распухали токены
-		clipped := truncateString(docText, 16000)
-		docBlock = "\n\nТекст документа (усечён):\n" + clipped
-	}
-
-	userPrompt := fmt.Sprintf(
-		"Ты помощник по документам. Пользователь загрузил файл '%s'. Задача: %s\n\nТребования к формату: %s%s",
-		truncateString(fileName, 120), truncateString(message, 4000), formatHint, docBlock,
+	userText := fmt.Sprintf(
+		"File: %s\nUser request: %s",
+		truncateString(fileName, 120),
+		truncateString(message, 4000),
 	)
 
+	// Подготовим мультимодальные части: текст запроса + сам файл как data URI
+	userParts := []contentPart{
+		{Type: "text", Text: userText},
+	}
+	ct := strings.ToLower(strings.TrimSpace(contentType))
+	if strings.Contains(ct, "image/") {
+		// Изображения отправляем как data URI напрямую
+		b64 := base64.StdEncoding.EncodeToString(fileBytes)
+		dataURI := "data:" + ct + ";base64," + b64
+		userParts = append(userParts, contentPart{Type: "image_url", ImageURL: &imageURL{Url: dataURI}})
+	} else if strings.Contains(ct, "pdf") {
+		// Для PDF: без OCR, растеризуем первую страницу в PNG и отправим как изображение
+		if pngB64, err := rasterizePDFFirstPageToPNGBase64(fileBytes); err == nil && strings.TrimSpace(pngB64) != "" {
+			dataURI := "data:image/png;base64," + pngB64
+			userParts = append(userParts, contentPart{Type: "image_url", ImageURL: &imageURL{Url: dataURI}})
+		}
+	}
+
 	reqBody := chatRequest{
-		Model: qwenModel,
+		Model: openRouterModel,
 		Messages: []chatMessage{
-			{Role: "system", Content: "Отвечай на русском. Будь краток и по делу."},
-			{Role: "user", Content: userPrompt},
+			{Role: "system", Content: []contentPart{{Type: "text", Text: systemContent}}},
+			{Role: "user", Content: userParts},
 		},
 	}
 
@@ -724,6 +739,42 @@ func startQwenProcessing(message string, fileName string, contentType string, ou
 	return nil
 }
 
+// Растеризация первой страницы PDF в PNG и возврат base64 без префикса data URI.
+// Требуются утилиты из poppler (pdftoppm).
+func rasterizePDFFirstPageToPNGBase64(pdfBytes []byte) (string, error) {
+	f, err := os.CreateTemp("", "docai_input_*.pdf")
+	if err != nil {
+		return "", err
+	}
+	pdfPath := f.Name()
+	_, werr := f.Write(pdfBytes)
+	cerr := f.Close()
+	if werr != nil {
+		os.Remove(pdfPath)
+		return "", werr
+	}
+	if cerr != nil {
+		os.Remove(pdfPath)
+		return "", cerr
+	}
+	defer os.Remove(pdfPath)
+
+	outPrefix := strings.TrimSuffix(pdfPath, ".pdf")
+	// -singlefile чтобы получить ровно один файл: <prefix>.png
+	cmd := exec.Command("pdftoppm", "-png", "-f", "1", "-l", "1", "-singlefile", pdfPath, outPrefix)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		_ = out // игнорируем вывод
+		return "", fmt.Errorf("pdftoppm error: %w", err)
+	}
+	pngPath := outPrefix + ".png"
+	defer os.Remove(pngPath)
+	data, err := os.ReadFile(pngPath)
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(data), nil
+}
+
 // publishProcessingResult сохраняет результат и оповещает подписчиков SSE
 func publishProcessingResult(text, status, batchID string, seq int, download string, userEmail string) {
 	resp := ProcessingResponse{
@@ -754,75 +805,6 @@ func publishProcessingResult(text, status, batchID string, seq int, download str
 		}
 		subscribersMux.RUnlock()
 	}(resp)
-}
-
-// extractDocumentText извлекает текст: PDF через pdftotext, изображения через tesseract. Возвращает текст или ошибку.
-func extractDocumentText(fileBytes []byte, fileName, contentType string) (string, error) {
-	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(fileName), "."))
-	// Создадим временный файл с правильным расширением
-	suffix := "." + ext
-	if ext == "" {
-		// по contentType
-		if strings.Contains(contentType, "pdf") {
-			suffix = ".pdf"
-		} else if strings.Contains(contentType, "png") {
-			suffix = ".png"
-		} else if strings.Contains(contentType, "jpeg") || strings.Contains(contentType, "jpg") {
-			suffix = ".jpg"
-		} else {
-			suffix = ".bin"
-		}
-	}
-
-	f, err := os.CreateTemp("", "docai_*"+suffix)
-	if err != nil {
-		return "", err
-	}
-	tmpPath := f.Name()
-	_, werr := f.Write(fileBytes)
-	cerr := f.Close()
-	if werr != nil {
-		os.Remove(tmpPath)
-		return "", werr
-	}
-	if cerr != nil {
-		os.Remove(tmpPath)
-		return "", cerr
-	}
-	defer os.Remove(tmpPath)
-
-	// Выбор стратегии
-	if strings.HasSuffix(tmpPath, ".pdf") {
-		return extractTextWithPdftotext(tmpPath)
-	}
-	if strings.HasSuffix(tmpPath, ".jpg") || strings.HasSuffix(tmpPath, ".jpeg") || strings.HasSuffix(tmpPath, ".png") {
-		return ocrWithTesseract(tmpPath)
-	}
-	return "", fmt.Errorf("неподдерживаемый тип файла для извлечения текста")
-}
-
-func extractTextWithPdftotext(pdfPath string) (string, error) {
-	// Требуется утилита pdftotext (poppler-utils). Выводим в stdout.
-	cmd := exec.Command("pdftotext", "-enc", "UTF-8", pdfPath, "-")
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("pdftotext error: %w", err)
-	}
-	return string(out), nil
-}
-
-func ocrWithTesseract(imgPath string) (string, error) {
-	// Требуется утилита tesseract. Печатает результат в stdout. Языки: rus+eng (можно изменить через env)
-	lang := strings.TrimSpace(os.Getenv("OCR_LANGS"))
-	if lang == "" {
-		lang = "rus+eng"
-	}
-	cmd := exec.Command("tesseract", imgPath, "stdout", "-l", lang, "--psm", "3")
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("tesseract error: %w", err)
-	}
-	return string(out), nil
 }
 
 func isValidFileType(filename string) bool {

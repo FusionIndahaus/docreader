@@ -22,7 +22,7 @@ var (
 	// OpenRouter / Qwen
 	openRouterAPIKey  string
 	openRouterBaseURL string
-	qwenModel         string
+	openRouterModel   string
 	siteURL           string
 	siteTitle         string
 )
@@ -88,9 +88,14 @@ func initEnvVariables() {
 	if openRouterBaseURL == "" {
 		openRouterBaseURL = "https://openrouter.ai/api/v1"
 	}
-	qwenModel = strings.TrimSpace(os.Getenv("QWEN_MODEL"))
-	if qwenModel == "" {
-		qwenModel = "qwen/qwen3-235b-a22b-2507"
+	// Универсальная переменная модели с обратной совместимостью.
+	openRouterModel = strings.TrimSpace(os.Getenv("OPENROUTER_MODEL"))
+	if openRouterModel == "" {
+		openRouterModel = strings.TrimSpace(os.Getenv("QWEN_MODEL"))
+	}
+	if openRouterModel == "" {
+		// По умолчанию — новая модель
+		openRouterModel = "google/gemini-2.0-flash-001"
 	}
 	siteURL = strings.TrimSpace(os.Getenv("SITE_URL"))
 	siteTitle = strings.TrimSpace(os.Getenv("SITE_TITLE"))

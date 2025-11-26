@@ -3,40 +3,56 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Интеллектуальная обработка документов</title>
+    <title>АВТОБУХГАЛТЕР</title>
     <link rel="icon" href="data:;base64,=">
-    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/static/main-general.css">
+    <link rel="stylesheet" href="/static/main-light.css">
+    <link rel="stylesheet" href="/static/main-dark.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+    <nav class="navbar">
+        <div class="theme-switcher">
+            <input type="checkbox" id="themeSwitch" aria-label="Переключить тему">
+            <label for="themeSwitch" class="switch">
+                <span class="switch-glow"></span>
+                <span class="switch-icon sun">☀️</span>
+                <span class="switch-icon moon">🌙</span>
+            </label>
+        </div>
+        <a href="/user/dashboard" class="nav-link nav-link--fixed">Личный кабинет</a>
+    </nav>
     <div class="theme-bg theme-bg--light" aria-hidden="true"></div>
     <div class="theme-bg theme-bg--dark" aria-hidden="true"></div>
     <div class="background-effects" aria-hidden="true"></div>
+
     <div class="container">
         <header>
             <div class="header-nav">
-                <h1>Интеллектуальная обработка документов</h1>
+                <h1>АВТОБУХГАЛТЕР</h1>
                 <nav class="main-nav">
-                    <a href="/user/dashboard" class="nav-link">Личный кабинет</a>
                     <button id="logoutBtn" class="btn btn-secondary" style="display: none;">Выйти</button>
                 </nav>
             </div>
-            <p class="subtitle">Загрузите ваш документ или изображение для анализа. Наш сервис обработает информацию и предоставит подробный отчет с результатами.</p>
+            <p class="subtitle">Загрузите ваш документ или изображение для анализа. Наш сервис обработает информацию и отправит указанные поля в вашу систему учёта.</p>
         </header>
         
         <main>
             <div class="card glass neon">
                 <form id="uploadForm" action="/submit" method="post" enctype="multipart/form-data">
                     <div class="form-group">
-                        <label for="message">Опишите документ:</label>
+                        <label for="message">
+                            <h3>Опишите документ:</h3>
+                        </label>
                         <textarea id="message" name="message" rows="5" placeholder="Укажите, что вы хотите узнать о документе или какую информацию нужно извлечь..." required></textarea>
                     </div>
                     
                     <div class="form-group">
-                        <label for="file">Выберите PDF или изображение:</label>
+                        <label for="file">
+                            <h4>Выберите PDF или изображение:</h4>
+                        </label>
                         <div class="file-input-container dropzone upload-zone">
                             <input type="file" id="file" name="file" accept=".pdf, .jpg, .jpeg, .png" multiple required>
 
@@ -64,7 +80,9 @@
                     </div>
                     
                     <div class="form-group">
-                        <label>Формат результата:</label>
+                        <label>
+                            <h4>Формат результата:</h4>
+                        </label>
                         <div class="radio-group">
                             <label class="radio-chip" data-format="csv"><input type="radio" name="outputFormat" value="csv" checked><span>CSV</span></label>
                             <label class="radio-chip" data-format="xlsx"><input type="radio" name="outputFormat" value="xlsx"><span>XLSX</span></label>
@@ -88,7 +106,7 @@
             </div>
             
             <div class="card feature-list glass">
-                <h3>Возможности системы</h3>
+                <h3>Возможности системы:</h3>
                 <ul class="features">
                     <li class="feature-item">
                         <span class="feature-icon">📄</span>
@@ -163,15 +181,7 @@
             <p>&copy; 2025 Система интеллектуальной обработки документов</p>
         </footer>
     </div>
-    <div class="theme-switcher">
-        <input type="checkbox" id="themeSwitch" aria-label="Переключить тему">
-        <label for="themeSwitch" class="switch">
-            <span class="switch-glow"></span>
-            <span class="switch-icon sun">☀️</span>
-            <span class="switch-icon moon">🌙</span>
-        </label>
-    </div>
     
     <script src="/static/script.js"></script>
 </body>
-</html> 
+</html>

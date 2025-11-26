@@ -1,0 +1,66 @@
+/* Light theme styles for dashboard */
+
+[data-theme="light"] .dashboard-welcome {
+    background: linear-gradient(135deg, #f5f7ff, #e3eaff);
+    color: var(--text-color);
+}
+
+[data-theme="light"] .dashboard-welcome h2 {
+    color: var(--primary-color);
+}
+
+[data-theme="light"] .dashboard-welcome p {
+    color: var(--text-color);
+    opacity: 1;
+}
+
+/* Карточки в dashboard-content с таким же фоном как в main-light.css */
+[data-theme="light"] .dashboard-content .card {
+    background-image: linear-gradient(
+        180deg,
+        rgba(230, 252, 255, 0.36) 10%,
+        rgba(7, 176, 202, 0.36) 70%,
+        rgba(11, 203, 233, 0.36) 80%
+    ) !important;
+    background-color: transparent !important;
+    color: var(--text-color);
+    border: 1px solid #07B0CA !important;
+}
+
+/* Header-content с таким же градиентом и обводкой как у карточек */
+[data-theme="light"] .header-content {
+    background-image: linear-gradient(
+        180deg,
+        rgba(230, 252, 255, 0.36) 10%,
+        rgba(7, 176, 202, 0.36) 70%,
+        rgba(11, 203, 233, 0.36) 80%
+    ) !important;
+    margin-bottom: 32px !important;
+    border-radius: 16px;
+    overflow: hidden;
+    background-color: transparent !important;
+    border: 1px solid #07B0CA !important;
+}
+
+/* Перевернутый градиент для карточек "Статистика использования" и "Настройки отображения форматов" */
+[data-theme="light"] .dashboard-content .card:has(.usage-stats),
+[data-theme="light"] .dashboard-content .card:has(.settings-form) {
+    background-image: linear-gradient(
+        0deg,
+        rgba(230, 252, 255, 0.36) 10%,
+        rgba(7, 176, 202, 0.31) 70%,
+        rgba(11, 203, 233, 0.31) 80%
+    ) !important;
+}
+
+/* Цвета текста в светлой теме */
+[data-theme="light"] h1,
+[data-theme="light"] h2,
+[data-theme="light"] h3,
+[data-theme="light"] h4 {
+    color: #000000 !important;
+}
+
+[data-theme="light"] p {
+    color: #808080 !important;
+}

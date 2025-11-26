@@ -5,8 +5,8 @@ class UserDashboard {
     }
 
     init() {
+        this.initTheme(); // Инициализируем тему ПЕРЕД привязкой событий
         this.bindEvents();
-        this.initTheme();
         this.loadUserData();
         this.loadSettings();
         this.loadSubscriptionInfo();
@@ -354,21 +354,25 @@ class UserDashboard {
     }
 
     initTheme() {
-        // Загружаем сохраненную тему
+        // Загружаем сохраненную тему или используем текущую из HTML
         const savedTheme = localStorage.getItem('theme');
+        const currentTheme = document.documentElement.getAttribute('data-theme');
         const themeSwitch = document.getElementById('themeSwitch');
         
-        if (savedTheme) {
-            document.documentElement.setAttribute('data-theme', savedTheme);
-            if (themeSwitch) {
-                themeSwitch.checked = savedTheme === 'dark';
-            }
-        } else {
-            // По умолчанию светлая тема
-            document.documentElement.setAttribute('data-theme', 'light');
-            if (themeSwitch) {
-                themeSwitch.checked = false;
-            }
+        // Определяем тему: сначала из localStorage, потом из HTML, потом по умолчанию
+        const theme = savedTheme || currentTheme || 'light';
+        
+        // Устанавливаем тему
+        document.documentElement.setAttribute('data-theme', theme);
+        
+        // Синхронизируем переключатель
+        if (themeSwitch) {
+            themeSwitch.checked = theme === 'dark';
+        }
+        
+        // Сохраняем тему в localStorage, если её там не было
+        if (!savedTheme) {
+            localStorage.setItem('theme', theme);
         }
     }
 

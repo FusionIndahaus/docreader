@@ -1,0 +1,212 @@
+[data-theme="dark"] .selected-file {
+    background: rgba(255,255,255,0.06);
+}
+[data-theme="dark"] .theme-bg--light { opacity: 0; }
+
+[data-theme="dark"] .theme-bg {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    transition: opacity 0.6s ease, filter 0.6s ease;
+    background-attachment: fixed;
+}
+
+[data-theme="dark"] .theme-bg--dark {
+    background-color: #000E10;
+    background-image: none;
+    opacity: 1;
+}
+
+/* Theme-specific base styles */
+[data-theme="dark"] .selected-file-clear {
+    background: rgba(255,255,255,0.04);
+    border-color: rgba(255,255,255,0.12);
+    color: #aab2d5;
+}
+
+[data-theme="dark"] .selected-file-clear:hover {
+    background: rgba(244, 67, 54, 0.12);
+    color: #ffb3ac;
+    border-color: rgba(244, 67, 54, 0.38);
+    box-shadow: 0 6px 14px rgba(244, 67, 54, 0.22);
+}
+
+/* Dark theme switch visuals */
+[data-theme="dark"] .switch {
+    background: linear-gradient(135deg, #131a33, #0f1530);
+    border-color: rgba(255,255,255,0.22);
+    box-shadow: 0 10px 26px rgba(0,0,0,0.45), inset 0 0 10px rgba(110,168,255,0.08);
+}
+
+[data-theme="dark"] .switch::before {
+    background: linear-gradient(135deg, #1b2448, #1a2040);
+    box-shadow: 0 10px 24px rgba(110,168,255,0.35), inset 0 0 14px rgba(194,107,255,0.18);
+    border: 1px solid rgba(110,168,255,0.25);
+}
+
+[data-theme="dark"] .switch .sun { opacity: 0.6; }
+[data-theme="dark"] .switch .moon { opacity: 0.95; }
+
+[data-theme="dark"] .upload-zone {
+    background: rgba(255,255,255,0.06);
+    border-color: rgba(255,255,255,0.14);
+}
+
+[data-theme="dark"] .container,
+[data-theme="dark"] header,
+[data-theme="dark"] main,
+[data-theme="dark"] footer {
+    position: relative;
+    z-index: 1;
+}
+
+/* Cards: glass + neon aura */
+[data-theme="dark"] .glass {
+    background: rgba(255, 255, 255, 0.06) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.12);
+}
+
+[data-theme="dark"] .neon {
+    box-shadow: none;
+}
+
+/* Градиентный фон и обводка для карточек */
+[data-theme="dark"] .card.glass.neon,
+[data-theme="dark"] .card.feature-list.glass {
+    background: linear-gradient(180deg, rgba(0, 14, 16, 0.36) 0%, rgba(57, 147, 161, 0.36) 100%) !important;
+    border: 1px solid #348996;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+/* Общие стили для заголовков и текста в тёмной теме */
+[data-theme="dark"] h1,
+[data-theme="dark"] h2,
+[data-theme="dark"] h3,
+[data-theme="dark"] h4 {
+    color: #ffffff;
+}
+
+[data-theme="dark"] p {
+    color: #a0a0a0;
+}
+
+[data-theme="dark"] body {
+    background-color: #000E10 !important;
+    background-image: none !important;
+    color: #d6dcff;
+}
+
+[data-theme="dark"] .background-effects {
+    opacity: 1;
+    transition: opacity 0.6s ease;
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(ellipse 1200px 800px at 50% 50%, #123237 0%, transparent 70%);
+    filter: blur(80px);
+    z-index: 0;
+}
+
+/* Navigation styles for dark theme */
+[data-theme="dark"] .main-nav .nav-link {
+    color: #6ea8ff;
+    border-color: #6ea8ff;
+}
+
+[data-theme="dark"] .main-nav .nav-link:hover {
+    background: #6ea8ff;
+    color: white;
+    box-shadow: 0 8px 20px rgba(110, 168, 255, 0.3);
+}
+
+/* Controls */
+[data-theme="dark"] .btn-glow {
+    box-shadow: 0 10px 30px rgba(110, 168, 255, 0.25), inset 0 0 14px rgba(194, 107, 255, 0.14);
+    border: 1px solid rgba(255,255,255,0.08);
+}
+
+[data-theme="dark"] .btn-glow:hover {
+    box-shadow: 0 12px 34px rgba(110, 168, 255, 0.32), inset 0 0 16px rgba(194, 107, 255, 0.18);
+}
+
+/* Form glass details */
+[data-theme="dark"] .glass label { color: #d6dcff; }
+[data-theme="dark"] .glass textarea {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: #e9edff;
+    border-radius: 12px;
+}
+
+[data-theme="dark"] .glass textarea:focus {
+    border-color: #6ea8ff;
+    box-shadow: 0 0 0 4px rgba(110,168,255,0.18);
+}
+
+[data-theme="dark"] .glass .file-name {
+    background: rgba(255,255,255,0.04);
+    color: #aab2d5;
+    border-radius: 12px;
+}
+
+[data-theme="dark"] .file-label,
+[data-theme="dark"] .file-label .file-text {
+    color: #000000;
+}
+
+/* Radio chips neon state */
+[data-theme="dark"] .radio-chip { box-shadow: 0 8px 16px rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.12); background: linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03)); }
+[data-theme="dark"] .radio-chip span { color: #aeb7ef; }
+[data-theme="dark"] .radio-chip:has(input[type="radio"]:checked) { box-shadow: 0 0 22px rgba(110,168,255,0.35); }
+
+/* Более темный фон для csv в темной теме */
+[data-theme="dark"] .radio-chip[data-format="csv"]:has(input[type="radio"]:checked) {
+    background: linear-gradient(135deg, #2db85a, #1fb39a);
+    border-color: transparent;
+}
+
+/* Менее яркий hover для невключённых чипов в тёмной теме */
+[data-theme="dark"] .radio-chip:hover {
+    box-shadow: 0 8px 18px rgba(0,0,0,0.35);
+}
+
+/* Results area glass */
+[data-theme="dark"] .response-section.glass .response-list {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: inset 0 0 8px rgba(0,0,0,0.25);
+}
+
+[data-theme="dark"] .response-section.glass .response-item {
+    background: rgba(255,255,255,0.06);
+    color: #dae0ff;
+    border-radius: 12px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+    border-left: 3px solid #6ea8ff;
+}
+
+[data-theme="dark"] .no-data { color: #8892bf; }
+
+/* Subtle selection */
+[data-theme="dark"] ::selection { background: rgba(110,168,255,0.35); color: #0a0d18; }
+
+[data-theme="dark"] .progress-bar {
+    background: rgba(255,255,255,0.1);
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+}
+
+[data-theme="dark"] .file-item {
+    background: rgba(255,255,255,0.04);
+    border-left-color: rgba(255,255,255,0.2);
+}
+
+[data-theme="dark"] .chip { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); }
+[data-theme="dark"] .chip-label { color: #dae0ff; }
+[data-theme="dark"] .chip-remove { color: #aab2d5; border-color: rgba(255,255,255,0.12); }
+[data-theme="dark"] #columns1cInput { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); color: #e9edff; border-radius: 12px; }
+[data-theme="dark"] #columns1cInput:focus { border-color: #6ea8ff; box-shadow: 0 0 0 4px rgba(110,168,255,0.18); }
+

@@ -1,24 +1,33 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-theme="light">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Admin Login</title>
-  <link rel="stylesheet" href="/static/admin/styles.css" />
-  <link rel="stylesheet" href="/static/styles.css" />
-  <style>
-    body { display:flex; align-items:center; justify-content:center; min-height:100vh; background:#0b0f1a; }
-    .card { background:#111827; padding:24px; border-radius:12px; width:100%; max-width:380px; box-shadow:0 10px 30px rgba(0,0,0,.4); }
-    h1 { color:#fff; font-size:20px; margin:0 0 16px; }
-    label { color:#cbd5e1; font-size:14px; display:block; margin:12px 0 6px; }
-    input { width:100%; padding:10px 12px; border-radius:8px; border:1px solid #1f2937; background:#0f172a; color:#e5e7eb; }
-    .btn { margin-top:16px; width:100%; padding:10px 12px; border-radius:8px; background:#6366f1; color:#fff; border:none; cursor:pointer; }
-    .btn:hover { background:#5458e6; }
-    .err { color:#fca5a5; margin-top:10px; min-height:18px; }
-  </style>
-  <script defer src="/static/admin/login.js"></script>
-  </head>
+  <link rel="stylesheet" href="/static/main-general.css" />
+  <link rel="stylesheet" href="/static/main-light.css" />
+  <link rel="stylesheet" href="/static/main-dark.css" />
+  <link rel="stylesheet" href="/static/admin/styles-login-admin.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
 <body>
+  <nav class="navbar">
+    <div class="theme-switcher">
+      <input type="checkbox" id="themeSwitch" aria-label="Переключить тему">
+      <label for="themeSwitch" class="switch">
+        <span class="switch-glow"></span>
+        <span class="switch-icon sun">☀️</span>
+        <span class="switch-icon moon">🌙</span>
+      </label>
+    </div>
+    <a href="/user/dashboard" class="nav-link">Личный кабинет</a>
+  </nav>
+  <div class="theme-bg theme-bg--light" aria-hidden="true"></div>
+  <div class="theme-bg theme-bg--dark" aria-hidden="true"></div>
+  <div class="background-effects" aria-hidden="true"></div>
+  
   <div class="card">
     <h1>Вход администратора</h1>
     <form id="loginForm">
@@ -30,6 +39,24 @@
       <div class="err" id="err"></div>
     </form>
   </div>
+  
+  <script>
+    // Переключение темы
+    const themeSwitch = document.getElementById('themeSwitch');
+    const htmlElement = document.documentElement;
+    
+    // Загружаем сохранённую тему из localStorage или используем текущую
+    const savedTheme = localStorage.getItem('theme') || htmlElement.getAttribute('data-theme') || 'light';
+    htmlElement.setAttribute('data-theme', savedTheme);
+    themeSwitch.checked = savedTheme === 'dark';
+    
+    // Обработчик изменения переключателя темы
+    themeSwitch.addEventListener('change', function() {
+      const newTheme = this.checked ? 'dark' : 'light';
+      htmlElement.setAttribute('data-theme', newTheme);
+      localStorage.setItem('theme', newTheme);
+    });
+  </script>
+  <script defer src="/static/admin/login.js"></script>
 </body>
 </html>
-

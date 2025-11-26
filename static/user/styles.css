@@ -101,12 +101,76 @@
     border-radius: 8px;
     transition: var(--transition);
     font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .nav-link:hover {
     background: rgba(63, 81, 181, 0.1);
     color: var(--primary-color);
 }
+
+.nav-link--outline {
+    border: 1px solid #58def2;
+    color: #58def2;
+    background: transparent;
+    min-height: 44px;
+    padding: 10px 20px;
+    font-weight: 500;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+    letter-spacing: 0.3px;
+}
+
+.nav-link--outline:hover {
+    background: #58def2;
+    color: #000;
+    box-shadow: 0 10px 24px rgba(88, 222, 242, 0.35);
+    transform: translateY(-2px);
+}
+
+/* Light theme navbar buttons */
+[data-theme="light"] .nav-link--outline {
+    color: #3f51b5;
+    border-color: #3f51b5;
+    background: transparent;
+}
+
+[data-theme="light"] .nav-link--outline:hover {
+    background: #3f51b5;
+    color: white;
+    box-shadow: 0 10px 24px rgba(63, 81, 181, 0.35);
+    transform: translateY(-2px);
+}
+
+/* Кнопка "Выйти" тоже наследует стиль */
+[data-theme="light"] .nav-link--logout {
+    color: #3f51b5;
+    border-color: #3f51b5;
+}
+
+[data-theme="light"] .nav-link--logout:hover {
+    background: #3f51b5;
+    color: white;
+    box-shadow: 0 10px 24px rgba(63, 81, 181, 0.35);
+    transform: translateY(-2px);
+}
+
+.dashboard-content input[type="checkbox"] {
+    accent-color: #58def2;
+}
+
+.nav button.nav-link {
+    background: transparent;
+    font: inherit;
+    cursor: pointer;
+}
+
+.nav button.nav-link:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
 
 .nav-link.active {
     background: var(--primary-color);
@@ -144,6 +208,27 @@
     background: #5a6268;
     transform: translateY(-2px);
     box-shadow: var(--shadow-md);
+}
+
+.profile-form .btn-primary,
+.settings-form .btn-primary,
+.password-form .btn-primary {
+    width: 100%;
+    background: #58def2;
+    color: #000;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.profile-form .btn-primary:hover,
+.settings-form .btn-primary:hover,
+.password-form .btn-primary:hover {
+    background: #48c0d3;
+    color: #000;
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
 }
 
 /* Subscription info */
@@ -542,14 +627,19 @@
     }
     
     .header-content {
-        flex-direction: column;
-        gap: 20px;
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 12px;
         text-align: center;
     }
     
     .nav {
-        flex-direction: column;
-        gap: 10px;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 12px;
+        justify-content: center;
+        align-items: center;
     }
     
     .dashboard-header h2 {

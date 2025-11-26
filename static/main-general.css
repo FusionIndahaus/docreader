@@ -823,10 +823,11 @@ footer:before {
     }
     
     .file-name {
-        margin-left: 0;
-        margin-top: 10px;
-        display: block;
-        width: 100%;
+        flex: 1;
+        font-weight: 500;
+        font-size: 0.95rem;
+        color: var(--text-color);
+        margin-right: 20px;
     }
     
     .response-section {
@@ -1044,6 +1045,9 @@ footer:before {
     border-radius: 12px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    white-space: nowrap;
+
+    margin-left: 15px;
 }
 
 .file-status.waiting {

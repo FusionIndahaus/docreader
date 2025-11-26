@@ -15,6 +15,7 @@
 
 [data-theme="dark"] .header {
     background: linear-gradient(180deg, rgba(0, 14, 16, 0.36) 0%, rgba(57, 147, 161, 0.36) 100%) !important;
+    margin-bottom: 32px !important;
     border: 1px solid #348996 !important;
 }
 

@@ -129,6 +129,37 @@
     transform: translateY(-2px);
 }
 
+/* Light theme navbar buttons */
+[data-theme="light"] .nav-link--outline {
+    color: #3f51b5;
+    border-color: #3f51b5;
+    background: transparent;
+}
+
+[data-theme="light"] .nav-link--outline:hover {
+    background: #3f51b5;
+    color: white;
+    box-shadow: 0 10px 24px rgba(63, 81, 181, 0.35);
+    transform: translateY(-2px);
+}
+
+/* Кнопка "Выйти" тоже наследует стиль */
+[data-theme="light"] .nav-link--logout {
+    color: #3f51b5;
+    border-color: #3f51b5;
+}
+
+[data-theme="light"] .nav-link--logout:hover {
+    background: #3f51b5;
+    color: white;
+    box-shadow: 0 10px 24px rgba(63, 81, 181, 0.35);
+    transform: translateY(-2px);
+}
+
+.dashboard-content input[type="checkbox"] {
+    accent-color: #58def2;
+}
+
 .nav button.nav-link {
     background: transparent;
     font: inherit;
@@ -596,14 +627,19 @@
     }
     
     .header-content {
-        flex-direction: column;
-        gap: 20px;
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 12px;
         text-align: center;
     }
     
     .nav {
-        flex-direction: column;
-        gap: 10px;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 12px;
+        justify-content: center;
+        align-items: center;
     }
     
     .dashboard-header h2 {

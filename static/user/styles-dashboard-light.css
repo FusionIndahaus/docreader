@@ -35,6 +35,9 @@
         rgba(7, 176, 202, 0.36) 70%,
         rgba(11, 203, 233, 0.36) 80%
     ) !important;
+    margin-bottom: 32px !important;
+    border-radius: 16px;
+    overflow: hidden;
     background-color: transparent !important;
     border: 1px solid #07B0CA !important;
 }

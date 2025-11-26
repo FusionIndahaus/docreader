@@ -354,6 +354,22 @@ input[type="file"] {
     backdrop-filter: none;
 }
 
+.nav-link--fixed {
+    position: fixed;
+    top: 24px;
+    right: 30px;
+    z-index: 1101;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+}
+
+.nav-link--fixed:hover {
+    background: #58def2;
+    color: #000;
+}
+
 .file-label:before { content: ''; margin-right: 0; }
 
 .file-name {
@@ -786,6 +802,12 @@ footer:before {
     .navbar .nav-link {
         text-align: left;
         width: auto;
+    }
+
+    .nav-link--fixed {
+        top: auto;
+        bottom: 20px;
+        right: 20px;
     }
     
     h1 {

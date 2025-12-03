@@ -5,7 +5,7 @@
 # Переменные (настройте под ваш сервер)
 SERVER_USER="root"
 SERVER_HOST="45.82.153.200"
-APP_NAME="n8nuploader"
+APP_NAME="autoaccounter"
 APP_DIR="/opt/$APP_NAME"
 SERVICE_FILE="/etc/systemd/system/$APP_NAME.service"
 
@@ -46,7 +46,7 @@ $SCP_CMD $APP_NAME.compose.tar.gz $SERVER_USER@$SERVER_HOST:/opt/
 echo "🔧 Разворачиваем compose на сервере..."
 $SSH_CMD $SERVER_USER@$SERVER_HOST << 'EOF'
     set -e
-    APP_NAME="n8nuploader"
+    APP_NAME="autoaccounter"
     APP_DIR="/opt/$APP_NAME"
     mkdir -p "${APP_DIR}"
     cd /opt
@@ -89,6 +89,8 @@ $SSH_CMD $SERVER_USER@$SERVER_HOST << 'EOF'
     if command -v ufw >/dev/null 2>&1; then
         ufw allow 80/tcp || true
         ufw allow 443/tcp || true
+        ufw allow 8081/tcp || true
+        ufw allow 444/tcp || true
         ufw allow 8080/tcp || true
         ufw allow 5050/tcp || true
         ufw allow 5432/tcp || true

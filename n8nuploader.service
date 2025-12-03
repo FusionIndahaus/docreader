@@ -1,13 +1,13 @@
 [Unit]
-Description=N8N Uploader Service
+Description=AutoAccounter Service
 After=network.target
 
 [Service]
 Type=simple
 User=www-data
 Group=www-data
-WorkingDirectory=/opt/n8nuploader
-ExecStart=/opt/n8nuploader/n8nuploader
+WorkingDirectory=/opt/autoaccounter
+ExecStart=/opt/autoaccounter/autoaccounter
 Restart=always
 RestartSec=5
 Environment=SERVER_PORT=8080
@@ -22,8 +22,8 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/opt/n8nuploader
+ReadWritePaths=/opt/autoaccounter
 ReadWritePaths=/tmp
 
 [Install]
-WantedBy=multi-user.target 
+WantedBy=multi-user.target

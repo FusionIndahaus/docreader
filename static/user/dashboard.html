@@ -34,6 +34,9 @@
                         </label>
                     </div>
                 </nav>
+                <div class="user-info">
+                    <span id="userName"></span>
+                </div>
             </div>
         </header>
 
@@ -119,6 +122,56 @@
                                 </label>
                             </div>
                             <button id="updateSettingsBtn" class="btn btn-primary">Сохранить настройки</button>
+                        </div>
+                    </div>
+
+                    <!-- Интеграции -->
+                    <div class="card">
+                        <h3>Интеграции</h3>
+                        <p>Выберите, куда отправлять результаты автоматически:</p>
+                        <div class="settings-form">
+                            <div class="form-group checkbox-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="destJson" checked>
+                                    <span>Показывать JSON в ЛК</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="destAmo">
+                                    <span>amoCRM</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="destBitrix">
+                                    <span>Bitrix24</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="dest1C">
+                                    <span>1C</span>
+                                </label>
+                            </div>
+                            <div class="integration-actions">
+                                <div id="amoStatus" class="muted">Проверка статуса amoCRM...</div>
+                                <button id="amoConnectBtn" class="btn btn-secondary">Подключить amoCRM</button>
+                            </div>
+                            <div class="integration-form">
+                                <h4>Настройки amoCRM (BYOA)</h4>
+                                <div class="form-group">
+                                    <label for="amoDomain">Домен amoCRM (например, https://yourcompany.amocrm.ru)</label>
+                                    <input type="text" id="amoDomain" placeholder="https://...amocrm.ru">
+                                </div>
+                                <div class="form-group">
+                                    <label for="amoClientId">Client ID</label>
+                                    <input type="text" id="amoClientId" placeholder="client_id">
+                                </div>
+                                <div class="form-group">
+                                    <label for="amoClientSecret">Client Secret</label>
+                                    <input type="password" id="amoClientSecret" placeholder="client_secret">
+                                </div>
+                                <div class="form-group">
+                                    <label for="amoRedirectUri">Redirect URI (если требуется, иначе можно оставить пустым)</label>
+                                    <input type="text" id="amoRedirectUri" placeholder="http://<ваш-домен>/user/amocrm/oauth/callback">
+                                </div>
+                                <button id="amoSaveSettingsBtn" class="btn btn-primary">Сохранить настройки amoCRM</button>
+                            </div>
                         </div>
                     </div>
 

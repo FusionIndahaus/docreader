@@ -19,6 +19,11 @@ var (
 	dbDSN         string
 	adminEmail    string
 	adminPassword string
+	// amoCRM
+	amoClientID     string
+	amoClientSecret string
+	amoRedirectURI  string
+	amoBaseURL      string
 	// OpenRouter / Qwen
 	openRouterAPIKey  string
 	openRouterBaseURL string
@@ -30,6 +35,16 @@ var (
 func initEnvVariables() {
 	if err := godotenv.Load(); err != nil {
 		log.Printf("WARNING: Не удалось загрузить переменные окружения из .env файла: %v", err)
+	}
+
+	// amoCRM OAuth2
+	amoClientID = strings.TrimSpace(os.Getenv("AMOCRM_CLIENT_ID"))
+	amoClientSecret = strings.TrimSpace(os.Getenv("AMOCRM_CLIENT_SECRET"))
+	amoRedirectURI = strings.TrimSpace(os.Getenv("AMOCRM_REDIRECT_URI"))
+	amoBaseURL = strings.TrimSpace(os.Getenv("AMOCRM_BASE_URL")) // пример: https://anatolyanufriev.amocrm.ru
+	if amoBaseURL == "" {
+		// можно задать по умолчанию пустым; без него интеграция не активна
+		amoBaseURL = ""
 	}
 
 	n8nWebhookURL = os.Getenv("N8N_WEBHOOK_URL")

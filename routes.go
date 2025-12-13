@@ -79,6 +79,23 @@ func setupRoutes() {
 	http.HandleFunc("/admin/customers/delete", requireAdmin(handleAdminCustomersDelete))
 	http.HandleFunc("/admin/customers/regenerate_password", requireAdmin(handleAdminCustomersRegeneratePassword))
 	http.HandleFunc("/admin/subscriptions/create", requireAdmin(handleAdminSubscriptionsCreate))
+	// (удалены админские amoCRM эндпоинты)
+	// User amoCRM
+	http.HandleFunc("/user/amocrm/status", requireUser(handleUserAmoStatus))
+	http.HandleFunc("/user/amocrm/connect", requireUser(handleUserAmoConnect))
+	http.HandleFunc("/user/amocrm/oauth/callback", requireUser(handleUserAmoOAuthCallback))
+	// User integrations settings (BYOA)
+	http.HandleFunc("/user/integrations/amocrm/settings", requireUser(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handleUserAmoSettingsGet(w, r)
+			return
+		}
+		if r.Method == http.MethodPut {
+			handleUserAmoSettingsPut(w, r)
+			return
+		}
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}))
 
 	// User auth
 	http.HandleFunc("/user/login", handleUserLogin)

@@ -8,7 +8,7 @@ import (
 
 func initDatabase() error {
 	var lastErr error
-	for i := 0; i < 30; i++ { // до ~60 секунд ожидания
+	for i := 0; i < 30; i++ {
 		d, err := sql.Open("postgres", dbDSN)
 		if err == nil {
 			if err = d.Ping(); err == nil {

@@ -31,6 +31,20 @@ class UserDashboard {
             this.updateSettings();
         });
 
+        const amoConnectBtn = document.getElementById('amoConnectBtn');
+        if (amoConnectBtn) {
+            amoConnectBtn.addEventListener('click', () => {
+                // перед подключением проверим, что BYOA креды заданы
+                this.ensureAmoCredentialsThenConnect();
+            });
+        }
+        const amoSaveBtn = document.getElementById('amoSaveSettingsBtn');
+        if (amoSaveBtn) {
+            amoSaveBtn.addEventListener('click', () => {
+                this.saveAmoSettings();
+            });
+        }
+
         // Theme switcher
         const themeSwitch = document.getElementById('themeSwitch');
         if (themeSwitch) {
@@ -59,7 +73,10 @@ class UserDashboard {
     }
 
     displayUserData(userData) {
-        document.getElementById('userName').textContent = userData.name || userData.email;
+        const nameEl = document.getElementById('userName');
+        if (nameEl) {
+            nameEl.textContent = userData.name || userData.email;
+        }
         document.getElementById('userFullName').value = userData.name || '';
         document.getElementById('userCompany').value = userData.company || '';
     }
@@ -76,6 +93,14 @@ class UserDashboard {
                 if (data.status === 'success') {
                     this.displaySubscriptionInfo(data.data);
                 }
+            } else if (response.status === 404) {
+                this.displaySubscriptionInfo({
+                    status: 'нет подписки',
+                    period_start: null,
+                    period_end: null,
+                    quota_total: 0,
+                    usage_count: 0
+                });
             }
         } catch (error) {
             console.error('Ошибка загрузки информации о подписке:', error);
@@ -227,6 +252,8 @@ class UserDashboard {
                 const data = await response.json();
                 if (data.status === 'success') {
                     this.displaySettings(data.data);
+                    this.loadAmoStatus(); // после загрузки настроек
+                    this.loadAmoSettings(); // загрузим BYOA поля
                 }
             }
         } catch (error) {
@@ -242,6 +269,21 @@ class UserDashboard {
         document.getElementById('formatCsv').checked = outputFormats.includes('csv');
         document.getElementById('formatXlsx').checked = outputFormats.includes('xlsx');
         document.getElementById('formatJson').checked = outputFormats.includes('json');
+
+        // Тумблеры интеграций
+        const destinations = settings.destinations || { json: true, amocrm: false, bitrix: false, '1c': false };
+        const byId = (id) => document.getElementById(id);
+        if (byId('destJson'))  byId('destJson').checked  = !!destinations.json;
+        if (byId('destAmo'))   byId('destAmo').checked   = !!destinations.amocrm;
+        if (byId('destBitrix'))byId('destBitrix').checked= !!destinations.bitrix;
+        if (byId('dest1C'))    byId('dest1C').checked    = !!destinations['1c'];
+
+        // Показать статус подключения amoCRM
+        const amoStatus = document.getElementById('amoStatus');
+        if (amoStatus) {
+            const connected = !!settings.amocrm_connected;
+            amoStatus.textContent = connected ? 'amoCRM: подключено' : 'amoCRM: не подключено';
+        }
     }
 
     async updateSettings() {
@@ -255,6 +297,14 @@ class UserDashboard {
             return;
         }
 
+        // Собираем тумблеры интеграций
+        const destinations = {
+            json: !!document.getElementById('destJson').checked,
+            amocrm: !!document.getElementById('destAmo').checked,
+            bitrix: !!document.getElementById('destBitrix').checked,
+            '1c': !!document.getElementById('dest1C').checked
+        };
+
         try {
             const response = await fetch('/user/settings', {
                 method: 'PUT',
@@ -263,7 +313,8 @@ class UserDashboard {
                 },
                 credentials: 'include',
                 body: JSON.stringify({
-                    output_formats: outputFormats
+                    output_formats: outputFormats,
+                    destinations: destinations
                 })
             });
 
@@ -280,6 +331,92 @@ class UserDashboard {
         } catch (error) {
             console.error('Ошибка сохранения настроек:', error);
             alert('Ошибка сохранения настроек');
+        }
+    }
+
+    async loadAmoStatus() {
+        try {
+            const r = await fetch('/user/amocrm/status', { credentials: 'include' });
+            if (!r.ok) return;
+            const data = await r.json();
+            const amoStatus = document.getElementById('amoStatus');
+            if (amoStatus && data && data.data) {
+                amoStatus.textContent = data.data.connected ? 'amoCRM: подключено' : 'amoCRM: не подключено';
+            }
+        } catch (e) {
+            // no-op
+        }
+    }
+
+    async loadAmoSettings() {
+        try {
+            const r = await fetch('/user/integrations/amocrm/settings', { credentials: 'include' });
+            if (!r.ok) return;
+            const data = await r.json();
+            const s = data.data || {};
+            document.getElementById('amoDomain').value = s.account_domain || '';
+            const creds = s.credentials || {};
+            document.getElementById('amoClientId').value = creds.client_id || '';
+            document.getElementById('amoClientSecret').value = ''; // не заполняем секрет (маскируется)
+            document.getElementById('amoRedirectUri').value = creds.redirect_uri || '';
+        } catch (e) {
+            console.warn('Не удалось загрузить настройки amoCRM', e);
+        }
+    }
+
+    async saveAmoSettings() {
+        const body = {
+            account_domain: document.getElementById('amoDomain').value.trim(),
+            client_id: document.getElementById('amoClientId').value.trim(),
+            client_secret: document.getElementById('amoClientSecret').value.trim(),
+            redirect_uri: document.getElementById('amoRedirectUri').value.trim(),
+            enabled: true
+        };
+        if (!body.account_domain || !body.client_id || !body.client_secret) {
+            alert('Введите domain, client_id и client_secret');
+            return;
+        }
+        try {
+            const r = await fetch('/user/integrations/amocrm/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(body)
+            });
+            const data = await r.json();
+            if (r.ok && data.status === 'success') {
+                alert('Настройки amoCRM сохранены');
+                // очистим поле секрета
+                document.getElementById('amoClientSecret').value = '';
+                this.loadAmoStatus();
+            } else {
+                alert('Ошибка сохранения: ' + (data.message || ''));
+            }
+        } catch (e) {
+            alert('Ошибка сети при сохранении настроек');
+        }
+    }
+
+    async ensureAmoCredentialsThenConnect() {
+        try {
+            const r = await fetch('/user/integrations/amocrm/settings', { credentials: 'include' });
+            if (!r.ok) {
+                alert('Сначала заполните настройки amoCRM');
+                return;
+            }
+            const data = await r.json();
+            const s = data.data || {};
+            const hasDomain = !!(s.account_domain && s.account_domain.length > 0);
+            const creds = s.credentials || {};
+            const hasClient = !!(creds.client_id && creds.client_id.length > 0);
+            // client_secret не возвращаем, поэтому просто проверяем наличие client_id и домена
+            if (!hasDomain || !hasClient) {
+                alert('Сначала заполните domain и client_id в настройках amoCRM');
+                return;
+            }
+            window.location.href = '/user/amocrm/connect';
+        } catch (e) {
+            alert('Не удалось проверить настройки amoCRM');
         }
     }
 

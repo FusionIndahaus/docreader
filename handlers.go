@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -805,6 +806,68 @@ func publishProcessingResult(text, status, batchID string, seq int, download str
 		}
 		subscribersMux.RUnlock()
 	}(resp)
+
+	// Если это успешный результат и указан пользователь — попробуем отправить в интеграции
+	if status == "completed" && strings.TrimSpace(userEmail) != "" {
+		go tryDispatchIntegrations(userEmail, text)
+	}
+}
+
+// tryDispatchIntegrations проверяет пользовательские настройки и при включенных тумблерах отправляет данные в внешние системы
+func tryDispatchIntegrations(userEmail, text string) {
+	// Загружаем настройки пользователя
+	if db == nil {
+		return
+	}
+	var metadata string
+	row := db.QueryRow(`SELECT metadata FROM customers WHERE deleted_at IS NULL AND lower(email)=lower($1)`, userEmail)
+	if err := row.Scan(&metadata); err != nil {
+		return
+	}
+	var settings map[string]interface{}
+	if metadata != "" {
+		_ = json.Unmarshal([]byte(metadata), &settings)
+	}
+	// Проверим, включен ли amoCRM
+	amocrmEnabled := false
+	if v, ok := settings["destinations"]; ok {
+		if m, ok2 := v.(map[string]interface{}); ok2 {
+			if raw, ok3 := m["amocrm"]; ok3 {
+				if b, ok4 := raw.(bool); ok4 && b {
+					amocrmEnabled = true
+				}
+			}
+		}
+	}
+	if !amocrmEnabled || !isAmoConfigured() {
+		return
+	}
+	// Получим customer_id и токены
+	customerID, err := getCustomerIDByEmail(userEmail)
+	if err != nil || customerID == "" {
+		return
+	}
+	// Дополнительно проверим, что интеграция включена в user_integrations
+	var enabled bool
+	row = db.QueryRow(`select enabled from user_integrations where user_id=$1 and provider='amocrm'`, customerID)
+	_ = row.Scan(&enabled)
+	if !enabled {
+		return
+	}
+	// Создадим простую сделку с именем, содержащим результат (усечённый)
+	name := truncateString("Document AI: "+text, 200)
+	payload := map[string]interface{}{
+		"name": name,
+	}
+	bodyBytes, _ := json.Marshal([]interface{}{payload}) // v4 требует массив
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	resp, err := amoAPIRequestForCustomer(ctx, customerID, http.MethodPost, "/api/v4/leads", bytes.NewReader(bodyBytes))
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	// игнорируем результат/ошибки тела для простоты; при необходимости можно логировать
 }
 
 func isValidFileType(filename string) bool {

@@ -41,8 +41,8 @@ CREATE TABLE IF NOT EXISTS usage_events (
     customer_id       uuid NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
     subscription_id   uuid NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
     occurred_at       timestamptz NOT NULL DEFAULT now(),
-    amount            integer NOT NULL DEFAULT 1,      -- how many units to charge (executions)
-    source            text NOT NULL DEFAULT 'n8n',     -- n8n|openai|manual
+    amount            integer NOT NULL DEFAULT 1,
+    source            text NOT NULL DEFAULT 'n8n',
     n8n_execution_id  text UNIQUE,
     input_tokens      integer,
     output_tokens     integer,

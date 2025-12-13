@@ -286,16 +286,49 @@ func handleUserSettingsGet(w http.ResponseWriter, r *http.Request) {
 	// Парсим метаданные
 	var settings map[string]interface{}
 	if metadata == "" || metadata == "{}" {
-		settings = map[string]interface{}{
-			"output_formats": []string{"csv", "xlsx", "json"},
-		}
+		settings = map[string]interface{}{}
 	} else {
 		if err := json.Unmarshal([]byte(metadata), &settings); err != nil {
-			settings = map[string]interface{}{
-				"output_formats": []string{"csv", "xlsx", "json"},
+			settings = map[string]interface{}{}
+		}
+	}
+
+	// Значения по умолчанию
+	if _, ok := settings["output_formats"]; !ok {
+		settings["output_formats"] = []string{"csv", "xlsx", "json"}
+	}
+	// Тумблеры интеграций
+	defaultDest := map[string]bool{"json": true, "amocrm": false, "bitrix": false, "1c": false}
+	if v, ok := settings["destinations"]; !ok {
+		settings["destinations"] = defaultDest
+	} else {
+		// подмерджим флаги
+		if m, ok2 := v.(map[string]interface{}); ok2 {
+			out := map[string]bool{}
+			for k, def := range defaultDest {
+				if raw, ok3 := m[k]; ok3 {
+					if b, ok4 := raw.(bool); ok4 {
+						out[k] = b
+						continue
+					}
+				}
+				out[k] = def
+			}
+			settings["destinations"] = out
+		} else {
+			settings["destinations"] = defaultDest
+		}
+	}
+	// Приложим статус подключения amoCRM для UI
+	var amoConnected bool
+	if isAmoConfigured() {
+		if customerID, err := getCustomerIDByEmail(email); err == nil && customerID != "" {
+			if tok, err := loadCustomerAmoTokens(r.Context(), customerID); err == nil && tok.AccessToken != "" {
+				amoConnected = true
 			}
 		}
 	}
+	settings["amocrm_connected"] = amoConnected
 
 	sendJSONResponse(w, APIResponse{
 		Status: "success",
@@ -321,7 +354,8 @@ func handleUserSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var updateData struct {
-		OutputFormats []string `json:"output_formats"`
+		OutputFormats []string        `json:"output_formats"`
+		Destinations  map[string]bool `json:"destinations"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
@@ -373,6 +407,17 @@ func handleUserSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 
 	// Обновляем настройки форматов
 	settings["output_formats"] = updateData.OutputFormats
+	// Обновляем тумблеры направлений (если переданы)
+	if updateData.Destinations != nil {
+		validKeys := map[string]bool{"json": true, "amocrm": true, "bitrix": true, "1c": true}
+		clean := map[string]bool{}
+		for k, v := range updateData.Destinations {
+			if validKeys[k] {
+				clean[k] = v
+			}
+		}
+		settings["destinations"] = clean
+	}
 
 	// Сериализуем обратно в JSON
 	metadataJSON, err := json.Marshal(settings)

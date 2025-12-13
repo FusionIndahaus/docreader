@@ -45,7 +45,7 @@ $SCP_CMD $APP_NAME.compose.tar.gz $SERVER_USER@$SERVER_HOST:/opt/
 
 echo "🔧 Разворачиваем compose на сервере..."
 $SSH_CMD $SERVER_USER@$SERVER_HOST << 'EOF'
-    set -e
+    set -euo pipefail
     APP_NAME="autoaccounter"
     APP_DIR="/opt/$APP_NAME"
     mkdir -p "${APP_DIR}"
@@ -82,9 +82,56 @@ $SSH_CMD $SERVER_USER@$SERVER_HOST << 'EOF'
     docker compose down || true
     # На всякий случай удалим висячий контейнер nginx-proxy
     docker rm -f nginx-proxy 2>/dev/null || true
+    # Уберём возможные конфликты имён контейнеров стека
+    docker rm -f app-postgres 2>/dev/null || true
+    docker rm -f autoaccounter 2>/dev/null || true
+    docker rm -f app-pgadmin 2>/dev/null || true
+    docker rm -f n8nuploader 2>/dev/null || true
     docker compose pull || true
     docker compose build --no-cache
     docker compose up -d
+
+    echo "⛏  Применяем миграции..."
+    # Дождёмся реальной готовности Postgres через pg_isready (до ~120 сек)
+    READY=0
+    for i in {1..60}; do
+        if docker exec app-postgres pg_isready -U appuser -d appdb >/dev/null 2>&1; then
+            READY=1
+            break
+        fi
+        STATUS=$(docker inspect -f '{{.State.Health.Status}}' app-postgres 2>/dev/null || echo "unknown")
+        echo "⏳ Ожидание готовности Postgres... [$i/60] (health=$STATUS)"
+        sleep 2
+    done
+    if [ "$READY" -ne 1 ]; then
+        echo "❌ Postgres не готов. Прерываем деплой."
+        exit 1
+    fi
+    # Регистр миграций (идемпотентно)
+    docker exec -i app-postgres psql -U appuser -d appdb -v ON_ERROR_STOP=1 \
+        -c "CREATE TABLE IF NOT EXISTS schema_migrations (filename text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());"
+    set -o pipefail
+    # Накатываем новые миграции по имени файла (в алфавитном порядке)
+    for f in $(find migrations -maxdepth 1 -type f -name '*.sql' | sort); do
+        bn=\$(basename "\$f")
+        applied=$(docker exec -i app-postgres psql -U appuser -d appdb -t -A -c "SELECT 1 FROM schema_migrations WHERE filename='${bn}'" || true)
+        if [ "$applied" != "1" ]; then
+            echo "➡️  Применяем миграцию: $bn"
+            TMP_FILE=\$(mktemp)
+            # Извлечём только блок '-- +goose Up' по '-- +goose Down'; если маркеров нет — применим весь файл
+            awk 'BEGIN{p=0} /^-- \\+goose Up/{p=1; next} /^-- \\+goose Down/{p=0} {if(p) print}' "$f" > "\$TMP_FILE"
+            if [ -s "\$TMP_FILE" ]; then
+                cat "\$TMP_FILE" | docker exec -i app-postgres psql -U appuser -d appdb -v ON_ERROR_STOP=1
+            else
+                cat "$f" | docker exec -i app-postgres psql -U appuser -d appdb -v ON_ERROR_STOP=1
+            fi
+            rm -f "\$TMP_FILE"
+            # Зафиксируем применение
+            docker exec -i app-postgres psql -U appuser -d appdb -c "INSERT INTO schema_migrations(filename) VALUES ('${bn}');"
+        else
+            echo "✔️  Уже применена: $bn"
+        fi
+    done
 
     if command -v ufw >/dev/null 2>&1; then
         ufw allow 80/tcp || true

@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # Скрипт для деплоя Go приложения на сервер
+set -euo pipefail
 
 # Переменные (настройте под ваш сервер)
 SERVER_USER="root"
@@ -11,8 +12,8 @@ SERVICE_FILE="/etc/systemd/system/$APP_NAME.service"
 
 # Опционально: пароль для SSH. Если задан SSH_PASS и установлен sshpass, используем его.
 SSH_PASS_CMD=""
-if [ -n "$SSH_PASS" ] && command -v sshpass >/dev/null 2>&1; then
-  SSH_PASS_CMD="sshpass -p $SSH_PASS"
+if [ -n "${SSH_PASS:-}" ] && command -v sshpass >/dev/null 2>&1; then
+  SSH_PASS_CMD="sshpass -p ${SSH_PASS}"
 fi
 
 SCP_CMD="scp"
@@ -26,7 +27,7 @@ echo "🚀 Начинаем деплой приложения $APP_NAME (Docker 
 
 # Формируем архив с compose-окружением и исходниками
 echo "📁 Подготовка архива compose..."
-tar -czf $APP_NAME.compose.tar.gz \
+tar --exclude "$APP_NAME.compose.tar.gz" -czf $APP_NAME.compose.tar.gz \
   Dockerfile \
   docker-compose.yml \
   nginx.conf \
@@ -36,6 +37,7 @@ tar -czf $APP_NAME.compose.tar.gz \
   go.mod \
   go.sum \
   *.go \
+  internal/ \
   migrations/ \
   docs/ \
   static/
@@ -49,6 +51,8 @@ $SSH_CMD $SERVER_USER@$SERVER_HOST << 'EOF'
     APP_NAME="autoaccounter"
     APP_DIR="/opt/$APP_NAME"
     mkdir -p "${APP_DIR}"
+    # Полная очистка каталога приложения, чтобы не осталось легаси-файлов
+    rm -rf "${APP_DIR:?}/"*
     cd /opt
     tar -xzf $APP_NAME.compose.tar.gz -C "${APP_DIR}" || true
 
@@ -90,6 +94,23 @@ $SSH_CMD $SERVER_USER@$SERVER_HOST << 'EOF'
     docker compose pull || true
     docker compose build --no-cache
     docker compose up -d
+
+    echo "🩺 Проверка доступности приложения на 8080..."
+    for i in {1..60}; do
+        if curl -fsS http://127.0.0.1:8080/health >/dev/null 2>&1; then
+            echo "✅ Приложение отвечает на /health"
+            break
+        fi
+        echo "⏳ Ожидание ответа приложения... [$i/60]"
+        sleep 2
+        if [ "$i" -eq 60 ]; then
+            echo "❌ Приложение не отвечает на /health. Последние логи контейнеров:"
+            docker compose ps
+            echo "---- app logs ----"
+            docker compose logs --no-color --tail=200 || true
+            exit 1
+        fi
+    done
 
     echo "⛏  Применяем миграции..."
     # Дождёмся реальной готовности Postgres через pg_isready (до ~120 сек)

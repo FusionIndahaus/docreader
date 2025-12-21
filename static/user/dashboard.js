@@ -62,6 +62,12 @@ class UserDashboard {
                 this.saveBitrixMapping();
             });
         }
+        const bitrixAddRowBtn = document.getElementById('bitrixAddRowBtn');
+        if (bitrixAddRowBtn) {
+            bitrixAddRowBtn.addEventListener('click', () => {
+                this.addBitrixRow();
+            });
+        }
         const amoLoadFieldsBtn = document.getElementById('amoLoadFieldsBtn');
         if (amoLoadFieldsBtn) {
             amoLoadFieldsBtn.addEventListener('click', () => {
@@ -340,10 +346,16 @@ class UserDashboard {
     }
 
     renderBitrixMapping(fields, conf) {
+        this.bitrixFields = fields;
+        this.currentBitrixConf = conf;
         const container = document.getElementById('bitrixFieldsMapping');
         if (!container) return;
         // Подготовим опции
-        const selects = [1,2,3,4,5].map(i => document.getElementById(`bitrixMap${i}`));
+        const rowsWrap = document.getElementById('bitrixMappingRows');
+        const getRowCountFromConf = (m) => {
+            const keys = Object.keys(m || {}).map(k => parseInt(k, 10)).filter(n => !isNaN(n));
+            return keys.length ? Math.max(...keys) : 0;
+        };
         const mkOption = (value, label) => {
             const opt = document.createElement('option');
             opt.value = value;
@@ -354,40 +366,93 @@ class UserDashboard {
             if (!selectEl) return;
             selectEl.innerHTML = '';
             selectEl.appendChild(mkOption('', '— не заполнять —'));
-            // стандартные часто используемые
-            selectEl.appendChild(mkOption('OPPORTUNITY', 'OPPORTUNITY (сумма)'));
-            selectEl.appendChild(mkOption('TITLE', 'TITLE (заголовок)'));
-            selectEl.appendChild(mkOption('COMMENTS', 'COMMENTS (комментарии)'));
-            // поля из Bitrix
-            (fields || []).forEach(f => {
-                selectEl.appendChild(mkOption(f.code, `${f.title || f.code} [${f.code}]`));
-            });
-        };
-        selects.forEach(fillSelect);
-        // Проставим сохранённые значения
-        const map = (conf && conf.lead_field_map_by_index) || {};
-        [1,2,3,4,5].forEach(i => {
-            const key = String(i);
-            const selectEl = document.getElementById(`bitrixMap${i}`);
-            if (selectEl && map[key]) {
-                selectEl.value = map[key];
+            const customOnly = !!((document.getElementById('bitrixCustomOnly') || {}).checked);
+            // стандартные поля добавляем только если не включен фильтр "только кастомные"
+            if (!customOnly) {
+                selectEl.appendChild(mkOption('OPPORTUNITY', 'OPPORTUNITY (сумма)'));
+                selectEl.appendChild(mkOption('TITLE', 'TITLE (заголовок)'));
+                selectEl.appendChild(mkOption('COMMENTS', 'COMMENTS (комментарии)'));
             }
-        });
+            // поля из Bitrix (человекочитаемое название, код в title для подсказки)
+            (this.bitrixFields || [])
+                .filter(f => !customOnly || (f.code && f.code.startsWith('UF_CRM_')))
+                .forEach(f => {
+                    const opt = mkOption(f.code, (f.title || f.code));
+                    opt.title = f.code;
+                    selectEl.appendChild(opt);
+                });
+        };
+        // Проставим сохранённые значения
+        const entity = ((document.getElementById('bitrixEntityType') || {}).value || 'lead');
+        const mapKey = entity === 'deal' ? 'deal_field_map_by_index' : 'lead_field_map_by_index';
+        const map = (conf && conf[mapKey]) || {};
+        // Сформируем количество строк: минимум 5, или по конфигу
+        const desiredRows = Math.max(5, getRowCountFromConf(map));
+        if (rowsWrap) {
+            rowsWrap.innerHTML = '';
+            for (let i = 1; i <= desiredRows; i++) {
+                const row = document.createElement('div');
+                row.className = 'mapping-row';
+                const label = document.createElement('label');
+                label.textContent = `Значение ${i} →`;
+                const select = document.createElement('select');
+                select.id = `bitrixMap${i}`;
+                select.setAttribute('data-index', String(i));
+                row.appendChild(label);
+                row.appendChild(select);
+                rowsWrap.appendChild(row);
+                fillSelect(select);
+                const key = String(i);
+                if (map[key]) {
+                    select.value = map[key];
+                }
+            }
+        }
         container.style.display = 'block';
+        // Перерисовывать список при переключении фильтра
+        const chk = document.getElementById('bitrixCustomOnly');
+        if (chk && !chk._binded) {
+            chk._binded = true;
+            chk.addEventListener('change', () => {
+                // Обновим только опции, сохраним выбранные значения
+                const selects = (rowsWrap ? Array.from(rowsWrap.querySelectorAll('select')) : []);
+                const selected = {};
+                selects.forEach(s => {
+                    const idx = s.getAttribute('data-index') || '';
+                    selected[idx] = s.value || '';
+                });
+                selects.forEach(fillSelect);
+                selects.forEach(s => {
+                    const idx = s.getAttribute('data-index') || '';
+                    if (selected[idx]) s.value = selected[idx];
+                });
+            });
+        }
     }
 
     async saveBitrixMapping() {
         const map = {};
-        [1,2,3,4,5].forEach(i => {
-            const v = (document.getElementById(`bitrixMap${i}`) || {}).value || '';
-            if (v) map[String(i)] = v;
+        const rowsWrap = document.getElementById('bitrixMappingRows');
+        const selects = rowsWrap ? Array.from(rowsWrap.querySelectorAll('select')) : [];
+        selects.forEach(s => {
+            const idx = s.getAttribute('data-index') || '';
+            const v = s.value || '';
+            if (idx && v) {
+                map[idx] = v;
+            }
         });
         try {
             const r = await fetch('/user/integrations/bitrix/mapping', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
-                body: JSON.stringify({ lead_field_map_by_index: map })
+                body: JSON.stringify((() => {
+                    const entity = ((document.getElementById('bitrixEntityType') || {}).value || 'lead');
+                    if (entity === 'deal') {
+                        return { entity_type: 'deal', deal_field_map_by_index: map };
+                    }
+                    return { entity_type: 'lead', lead_field_map_by_index: map };
+                })())
             });
             const data = await r.json();
             if (r.ok && data.status === 'success') {
@@ -398,6 +463,48 @@ class UserDashboard {
         } catch (e) {
             alert('Ошибка сети при сохранении маппинга Bitrix');
         }
+    }
+
+    addBitrixRow() {
+        const rowsWrap = document.getElementById('bitrixMappingRows');
+        if (!rowsWrap) return;
+        const nextIndex = (rowsWrap.querySelectorAll('select').length || 0) + 1;
+        const row = document.createElement('div');
+        row.className = 'mapping-row';
+        const label = document.createElement('label');
+        label.textContent = `Значение ${nextIndex} →`;
+        const select = document.createElement('select');
+        select.id = `bitrixMap${nextIndex}`;
+        select.setAttribute('data-index', String(nextIndex));
+        row.appendChild(label);
+        row.appendChild(select);
+        rowsWrap.appendChild(row);
+        // наполнить опциями
+        const customOnly = !!((document.getElementById('bitrixCustomOnly') || {}).checked);
+        const fillSelect = (selectEl) => {
+            if (!selectEl) return;
+            selectEl.innerHTML = '';
+            const mkOption = (value, label) => {
+                const opt = document.createElement('option');
+                opt.value = value;
+                opt.textContent = label;
+                return opt;
+            };
+            selectEl.appendChild(mkOption('', '— не заполнять —'));
+            if (!customOnly) {
+                selectEl.appendChild(mkOption('OPPORTUNITY', 'OPPORTUNITY (сумма)'));
+                selectEl.appendChild(mkOption('TITLE', 'TITLE (заголовок)'));
+                selectEl.appendChild(mkOption('COMMENTS', 'COMMENTS (комментарии)'));
+            }
+            (this.bitrixFields || [])
+                .filter(f => !customOnly || (f.code && f.code.startsWith('UF_CRM_')))
+                .forEach(f => {
+                    const opt = mkOption(f.code, (f.title || f.code));
+                    opt.title = f.code;
+                    selectEl.appendChild(opt);
+                });
+        };
+        fillSelect(select);
     }
 
     // ===== amoCRM mapping UI =====
@@ -643,6 +750,9 @@ class UserDashboard {
             const data = await r.json();
             const s = data.data || {};
             document.getElementById('bitrixWebhookBase').value = s.webhook_base || '';
+            const et = (s.entity_type || 'lead');
+            const sel = document.getElementById('bitrixEntityType');
+            if (sel) sel.value = et;
         } catch (e) {
             console.warn('Не удалось загрузить настройки Bitrix', e);
         }
@@ -650,6 +760,7 @@ class UserDashboard {
 
     async saveBitrixSettings() {
         const webhookBase = document.getElementById('bitrixWebhookBase').value.trim();
+        const entityType = (document.getElementById('bitrixEntityType') || {}).value || 'lead';
         if (!webhookBase) {
             alert('Введите базовый URL вебхука Bitrix');
             return;
@@ -661,6 +772,7 @@ class UserDashboard {
                 credentials: 'include',
                 body: JSON.stringify({
                     webhook_base: webhookBase,
+                    entity_type: entityType,
                     enabled: true
                 })
             });

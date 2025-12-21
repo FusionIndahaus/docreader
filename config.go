@@ -10,7 +10,6 @@ import (
 )
 
 var (
-	n8nWebhookURL string
 	serverPort    string
 	maxFileSize   int64
 	maxResponses  int
@@ -37,7 +36,6 @@ func initEnvVariables() {
 		log.Printf("WARNING: Не удалось загрузить переменные окружения из .env файла: %v", err)
 	}
 
-	// amoCRM OAuth2
 	amoClientID = strings.TrimSpace(os.Getenv("AMOCRM_CLIENT_ID"))
 	amoClientSecret = strings.TrimSpace(os.Getenv("AMOCRM_CLIENT_SECRET"))
 	amoRedirectURI = strings.TrimSpace(os.Getenv("AMOCRM_REDIRECT_URI"))
@@ -45,11 +43,6 @@ func initEnvVariables() {
 	if amoBaseURL == "" {
 		// можно задать по умолчанию пустым; без него интеграция не активна
 		amoBaseURL = ""
-	}
-
-	n8nWebhookURL = os.Getenv("N8N_WEBHOOK_URL")
-	if n8nWebhookURL == "" {
-		n8nWebhookURL = "https://qbitagents.app.n8n.cloud/webhook-test/d8f99a21-dc92-4dac-9746-6581ce15df8f"
 	}
 
 	serverPort = os.Getenv("SERVER_PORT")

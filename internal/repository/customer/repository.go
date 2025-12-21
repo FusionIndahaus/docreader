@@ -1,11 +1,12 @@
-package main
+package customer
 
 import (
 	"database/sql"
 	"strings"
 )
 
-func getCustomerIDByEmail(email string) (string, error) {
+// GetIDByEmail возвращает идентификатор клиента по email.
+func GetIDByEmail(db *sql.DB, email string) (string, error) {
 	if db == nil {
 		return "", sql.ErrConnDone
 	}

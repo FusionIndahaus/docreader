@@ -206,6 +206,13 @@
                                     <label for="bitrixWebhookBase">Базовый URL вебхука</label>
                                     <input type="text" id="bitrixWebhookBase" placeholder="https://<portal>.bitrix24.ru/rest/<userId>/<webhook>">
                                 </div>
+                                <div class="form-group">
+                                    <label for="bitrixEntityType">Сущность для создания</label>
+                                    <select id="bitrixEntityType">
+                                        <option value="lead">Лид</option>
+                                        <option value="deal">Сделка</option>
+                                    </select>
+                                </div>
                                 <button id="bitrixSaveSettingsBtn" class="btn btn-primary">Сохранить настройки Bitrix</button>
                                 <div class="form-group" style="margin-top: 12px;">
                                     <button id="bitrixLoadFieldsBtn" class="btn btn-secondary">Загрузить поля из Bitrix</button>
@@ -213,26 +220,35 @@
                                 <div id="bitrixFieldsMapping" class="form-group" style="display:none;">
                                     <h5>Маппинг значений → поля лида (по порядку строк ответа)</h5>
                                     <p class="muted">1-я строка ответа → Поле 1, 2-я строка → Поле 2 и т.д.</p>
-                                    <div class="mapping-row">
-                                        <label>Значение 1 →</label>
-                                        <select id="bitrixMap1"></select>
+                                    <div class="form-group">
+                                        <label class="checkbox-label">
+                                            <input type="checkbox" id="bitrixCustomOnly">
+                                            <span>Показывать только кастомные поля (UF_CRM_*)</span>
+                                        </label>
                                     </div>
-                                    <div class="mapping-row">
-                                        <label>Значение 2 →</label>
-                                        <select id="bitrixMap2"></select>
+                                    <div id="bitrixMappingRows">
+                                        <div class="mapping-row">
+                                            <label>Значение 1 →</label>
+                                            <select id="bitrixMap1" data-index="1"></select>
+                                        </div>
+                                        <div class="mapping-row">
+                                            <label>Значение 2 →</label>
+                                            <select id="bitrixMap2" data-index="2"></select>
+                                        </div>
+                                        <div class="mapping-row">
+                                            <label>Значение 3 →</label>
+                                            <select id="bitrixMap3" data-index="3"></select>
+                                        </div>
+                                        <div class="mapping-row">
+                                            <label>Значение 4 →</label>
+                                            <select id="bitrixMap4" data-index="4"></select>
+                                        </div>
+                                        <div class="mapping-row">
+                                            <label>Значение 5 →</label>
+                                            <select id="bitrixMap5" data-index="5"></select>
+                                        </div>
                                     </div>
-                                    <div class="mapping-row">
-                                        <label>Значение 3 →</label>
-                                        <select id="bitrixMap3"></select>
-                                    </div>
-                                    <div class="mapping-row">
-                                        <label>Значение 4 →</label>
-                                        <select id="bitrixMap4"></select>
-                                    </div>
-                                    <div class="mapping-row">
-                                        <label>Значение 5 →</label>
-                                        <select id="bitrixMap5"></select>
-                                    </div>
+                                    <button id="bitrixAddRowBtn" class="btn btn-secondary" style="margin-top:8px;">Добавить значение</button>
                                     <button id="bitrixSaveMappingBtn" class="btn btn-primary" style="margin-top:8px;">Сохранить маппинг</button>
                                 </div>
                             </div>

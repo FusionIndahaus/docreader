@@ -4,8 +4,14 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -16,26 +22,6 @@ func getEnv(key, def string) string {
 		return v
 	}
 	return def
-}
-
-// sanitizeFileName приводит имя к безопасному виду: a-z, 0-9, _, -
-func sanitizeFileName(name string) string {
-	name = strings.TrimSpace(name)
-	name = strings.ToLower(name)
-	name = strings.ReplaceAll(name, " ", "_")
-
-	var b strings.Builder
-	for _, r := range name {
-		if (r >= 'a' && r <= 'z') ||
-			(r >= '0' && r <= '9') ||
-			r == '_' || r == '-' {
-			b.WriteRune(r)
-		}
-	}
-	if b.Len() == 0 {
-		return "file"
-	}
-	return b.String()
 }
 
 // safeCompareStrings делает сравнение строк в постоянное время
@@ -61,4 +47,43 @@ func generateSessionToken() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+func generateSimpleID() string {
+	return fmt.Sprintf("res_%d", time.Now().UnixNano())
+}
+
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
+func isValidFileType(filename string) bool {
+	ext := strings.ToLower(filepath.Ext(filename))
+	switch ext {
+	case ".pdf", ".jpg", ".jpeg", ".png":
+		return true
+	default:
+		return false
+	}
+}
+
+func sendJSONResponse(w http.ResponseWriter, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		log.Printf("ERROR: Ошибка кодирования JSON: %v", err)
+	}
+}
+
+func sendJSONError(w http.ResponseWriter, message string, statusCode int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	response := APIResponse{
+		Status:  "error",
+		Message: message,
+	}
+	_ = json.NewEncoder(w).Encode(response)
 }

@@ -1,8 +1,9 @@
-package main
+package amocrm
 
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,14 +12,14 @@ import (
 	"time"
 )
 
-type amoTokenResponse struct {
+type TokenResponse struct {
 	TokenType    string `json:"token_type"`
 	ExpiresIn    int64  `json:"expires_in"`
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 }
 
-type amoUserTokens struct {
+type UserTokens struct {
 	CustomerID    string
 	AccountDomain string
 	AccessToken   string
@@ -26,19 +27,44 @@ type amoUserTokens struct {
 	ExpiresAt     time.Time
 }
 
-func isAmoConfigured() bool {
-	return true
-}
-
-type amoUserCredentials struct {
+type UserCredentials struct {
 	AccountDomain string
 	ClientID      string
 	ClientSecret  string
 	RedirectURI   string
 }
 
-func loadCustomerAmoCredentials(ctx context.Context, customerID string) (amoUserCredentials, error) {
-	var out amoUserCredentials
+func IsConfigured() bool {
+	return true
+}
+
+func urlQueryEscape(s string) string {
+	r := strings.NewReplacer(
+		" ", "%20",
+		"!", "%21",
+		"#", "%23",
+		"$", "%24",
+		"&", "%26",
+		"'", "%27",
+		"(", "%28",
+		")", "%29",
+		"*", "%2A",
+		"+", "%2B",
+		",", "%2C",
+		"/", "%2F",
+		":", "%3A",
+		";", "%3B",
+		"=", "%3D",
+		"?", "%3F",
+		"@", "%40",
+		"[", "%5B",
+		"]", "%5D",
+	)
+	return r.Replace(s)
+}
+
+func LoadCustomerCredentials(ctx context.Context, db *sql.DB, customerID string) (UserCredentials, error) {
+	var out UserCredentials
 	if db == nil {
 		return out, fmt.Errorf("DB not connected")
 	}
@@ -67,8 +93,8 @@ func loadCustomerAmoCredentials(ctx context.Context, customerID string) (amoUser
 	return out, nil
 }
 
-func getAmoAuthorizeURLForCustomer(ctx context.Context, customerID string, state string) (string, error) {
-	creds, err := loadCustomerAmoCredentials(ctx, customerID)
+func GetAuthorizeURLForCustomer(ctx context.Context, db *sql.DB, customerID string, state string, fallbackRedirect string) (string, error) {
+	creds, err := LoadCustomerCredentials(ctx, db, customerID)
 	if err != nil {
 		return "", err
 	}
@@ -76,9 +102,8 @@ func getAmoAuthorizeURLForCustomer(ctx context.Context, customerID string, state
 		return "", fmt.Errorf("amoCRM credentials incomplete")
 	}
 	redirect := creds.RedirectURI
-	// если redirect пуст, можно попытаться использовать глобальный amoRedirectURI, иначе ошибка
 	if redirect == "" {
-		redirect = strings.TrimSpace(amoRedirectURI)
+		redirect = strings.TrimSpace(fallbackRedirect)
 		if redirect == "" {
 			return "", fmt.Errorf("redirect_uri is required")
 		}
@@ -88,14 +113,11 @@ func getAmoAuthorizeURLForCustomer(ctx context.Context, customerID string, state
 		base, urlQueryEscape(creds.ClientID), urlQueryEscape(redirect), urlQueryEscape(state)), nil
 }
 
-// ===== Персональные токены amoCRM на пользователя =====
-
-func loadCustomerAmoTokens(ctx context.Context, customerID string) (amoUserTokens, error) {
-	var t amoUserTokens
+func LoadCustomerTokens(ctx context.Context, db *sql.DB, customerID string) (UserTokens, error) {
+	var t UserTokens
 	if db == nil {
 		return t, fmt.Errorf("DB not connected")
 	}
-	// Читаем из user_integrations
 	var credentialsJSON []byte
 	row := db.QueryRowContext(ctx, `
 		select id, user_id, account_domain, credentials
@@ -122,7 +144,7 @@ func loadCustomerAmoTokens(ctx context.Context, customerID string) (amoUserToken
 	return t, nil
 }
 
-func saveCustomerAmoTokens(ctx context.Context, customerID string, t amoUserTokens) error {
+func SaveCustomerTokens(ctx context.Context, db *sql.DB, customerID string, t UserTokens) error {
 	if db == nil {
 		return fmt.Errorf("DB not connected")
 	}
@@ -144,44 +166,27 @@ func saveCustomerAmoTokens(ctx context.Context, customerID string, t amoUserToke
 	return err
 }
 
-func ensureCustomerAmoAccessToken(ctx context.Context, customerID string) (string, error) {
-	tok, err := loadCustomerAmoTokens(ctx, customerID)
-	if err != nil {
-		return "", err
-	}
-	if time.Until(tok.ExpiresAt) < 60*time.Second {
-		if err := refreshCustomerAmoToken(ctx, customerID); err != nil {
-			return "", err
-		}
-		tok, err = loadCustomerAmoTokens(ctx, customerID)
-		if err != nil {
-			return "", err
-		}
-	}
-	return tok.AccessToken, nil
-}
-
-func refreshCustomerAmoToken(ctx context.Context, customerID string) error {
+func RefreshCustomerToken(ctx context.Context, db *sql.DB, customerID string, fallbackRedirect string) error {
 	if db == nil {
 		return fmt.Errorf("DB not connected")
 	}
-	if !isAmoConfigured() {
-		return fmt.Errorf("amoCRM не сконфигурирован (env)")
+	if !IsConfigured() {
+		return fmt.Errorf("amoCRM not configured")
 	}
-	tok, err := loadCustomerAmoTokens(ctx, customerID)
+	tok, err := LoadCustomerTokens(ctx, db, customerID)
 	if err != nil {
 		return err
 	}
 	if tok.RefreshToken == "" {
-		return fmt.Errorf("refresh token отсутствует")
+		return fmt.Errorf("refresh token is empty")
 	}
-	creds, err := loadCustomerAmoCredentials(ctx, customerID)
+	creds, err := LoadCustomerCredentials(ctx, db, customerID)
 	if err != nil {
 		return err
 	}
 	redirect := creds.RedirectURI
 	if redirect == "" {
-		redirect = strings.TrimSpace(amoRedirectURI)
+		redirect = strings.TrimSpace(fallbackRedirect)
 	}
 	body := map[string]string{
 		"client_id":     creds.ClientID,
@@ -205,14 +210,14 @@ func refreshCustomerAmoToken(ctx context.Context, customerID string) error {
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("amoCRM token refresh %d: %s", resp.StatusCode, truncateString(string(b), 500))
+		return fmt.Errorf("amoCRM token refresh %d: %s", resp.StatusCode, truncate(string(b), 500))
 	}
-	var tr amoTokenResponse
+	var tr TokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
 		return err
 	}
 	expiresAt := time.Now().Add(time.Duration(tr.ExpiresIn) * time.Second)
-	return saveCustomerAmoTokens(ctx, customerID, amoUserTokens{
+	return SaveCustomerTokens(ctx, db, customerID, UserTokens{
 		CustomerID:    customerID,
 		AccountDomain: strings.TrimRight(creds.AccountDomain, "/"),
 		AccessToken:   tr.AccessToken,
@@ -221,20 +226,20 @@ func refreshCustomerAmoToken(ctx context.Context, customerID string) error {
 	})
 }
 
-func exchangeAmoAuthCodeForCustomer(ctx context.Context, customerID string, code string) error {
+func ExchangeAuthCodeForCustomer(ctx context.Context, db *sql.DB, customerID string, code string, fallbackRedirect string) error {
 	if db == nil {
 		return fmt.Errorf("DB not connected")
 	}
-	if !isAmoConfigured() {
-		return fmt.Errorf("amoCRM не сконфигурирован (env)")
+	if !IsConfigured() {
+		return fmt.Errorf("amoCRM not configured")
 	}
-	creds, err := loadCustomerAmoCredentials(ctx, customerID)
+	creds, err := LoadCustomerCredentials(ctx, db, customerID)
 	if err != nil {
 		return err
 	}
 	redirect := creds.RedirectURI
 	if redirect == "" {
-		redirect = strings.TrimSpace(amoRedirectURI)
+		redirect = strings.TrimSpace(fallbackRedirect)
 	}
 	body := map[string]string{
 		"client_id":     creds.ClientID,
@@ -258,14 +263,14 @@ func exchangeAmoAuthCodeForCustomer(ctx context.Context, customerID string, code
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("amoCRM token exchange %d: %s", resp.StatusCode, truncateString(string(b), 500))
+		return fmt.Errorf("amoCRM token exchange %d: %s", resp.StatusCode, truncate(string(b), 500))
 	}
-	var tr amoTokenResponse
+	var tr TokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
 		return err
 	}
 	expiresAt := time.Now().Add(time.Duration(tr.ExpiresIn) * time.Second)
-	return saveCustomerAmoTokens(ctx, customerID, amoUserTokens{
+	return SaveCustomerTokens(ctx, db, customerID, UserTokens{
 		CustomerID:    customerID,
 		AccountDomain: strings.TrimRight(creds.AccountDomain, "/"),
 		AccessToken:   tr.AccessToken,
@@ -274,12 +279,29 @@ func exchangeAmoAuthCodeForCustomer(ctx context.Context, customerID string, code
 	})
 }
 
-func amoAPIRequestForCustomer(ctx context.Context, customerID string, method string, path string, body io.Reader) (*http.Response, error) {
-	token, err := ensureCustomerAmoAccessToken(ctx, customerID)
+func EnsureCustomerAccessToken(ctx context.Context, db *sql.DB, customerID string, fallbackRedirect string) (string, error) {
+	tok, err := LoadCustomerTokens(ctx, db, customerID)
+	if err != nil {
+		return "", err
+	}
+	if time.Until(tok.ExpiresAt) < 60*time.Second {
+		if err := RefreshCustomerToken(ctx, db, customerID, fallbackRedirect); err != nil {
+			return "", err
+		}
+		tok, err = LoadCustomerTokens(ctx, db, customerID)
+		if err != nil {
+			return "", err
+		}
+	}
+	return tok.AccessToken, nil
+}
+
+func APIRequestForCustomer(ctx context.Context, db *sql.DB, customerID string, method string, path string, body io.Reader, fallbackRedirect string) (*http.Response, error) {
+	token, err := EnsureCustomerAccessToken(ctx, db, customerID, fallbackRedirect)
 	if err != nil {
 		return nil, err
 	}
-	tok, err := loadCustomerAmoTokens(ctx, customerID)
+	tok, err := LoadCustomerTokens(ctx, db, customerID)
 	if err != nil || strings.TrimSpace(tok.AccountDomain) == "" {
 		return nil, fmt.Errorf("amoCRM account domain not set")
 	}
@@ -299,10 +321,10 @@ func amoAPIRequestForCustomer(ctx context.Context, customerID string, method str
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
 		_ = resp.Body.Close()
-		if err := refreshCustomerAmoToken(ctx, customerID); err != nil {
+		if err := RefreshCustomerToken(ctx, db, customerID, fallbackRedirect); err != nil {
 			return nil, err
 		}
-		token, err = ensureCustomerAmoAccessToken(ctx, customerID)
+		token, err = EnsureCustomerAccessToken(ctx, db, customerID, fallbackRedirect)
 		if err != nil {
 			return nil, err
 		}
@@ -322,28 +344,9 @@ func amoAPIRequestForCustomer(ctx context.Context, customerID string, method str
 	return resp, nil
 }
 
-// Утилита безопасного экранирования для URL-параметров
-func urlQueryEscape(s string) string {
-	r := strings.NewReplacer(
-		" ", "%20",
-		"!", "%21",
-		"#", "%23",
-		"$", "%24",
-		"&", "%26",
-		"'", "%27",
-		"(", "%28",
-		")", "%29",
-		"*", "%2A",
-		"+", "%2B",
-		",", "%2C",
-		"/", "%2F",
-		":", "%3A",
-		";", "%3B",
-		"=", "%3D",
-		"?", "%3F",
-		"@", "%40",
-		"[", "%5B",
-		"]", "%5D",
-	)
-	return r.Replace(s)
+func truncate(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
 }

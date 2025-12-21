@@ -96,6 +96,41 @@ func setupRoutes() {
 		}
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}))
+	http.HandleFunc("/user/integrations/amocrm/fields", requireUser(handleUserAmoFields))
+	http.HandleFunc("/user/integrations/amocrm/mapping", requireUser(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handleUserAmoMappingGet(w, r)
+			return
+		}
+		if r.Method == http.MethodPut {
+			handleUserAmoMappingPut(w, r)
+			return
+		}
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}))
+	http.HandleFunc("/user/integrations/bitrix/settings", requireUser(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handleUserBitrixSettingsGet(w, r)
+			return
+		}
+		if r.Method == http.MethodPut {
+			handleUserBitrixSettingsPut(w, r)
+			return
+		}
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}))
+	http.HandleFunc("/user/integrations/bitrix/fields", requireUser(handleUserBitrixFields))
+	http.HandleFunc("/user/integrations/bitrix/mapping", requireUser(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handleUserBitrixMappingGet(w, r)
+			return
+		}
+		if r.Method == http.MethodPut {
+			handleUserBitrixMappingPut(w, r)
+			return
+		}
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}))
 
 	// User auth
 	http.HandleFunc("/user/login", handleUserLogin)

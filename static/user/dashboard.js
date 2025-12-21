@@ -44,6 +44,36 @@ class UserDashboard {
                 this.saveAmoSettings();
             });
         }
+        const bitrixSaveBtn = document.getElementById('bitrixSaveSettingsBtn');
+        if (bitrixSaveBtn) {
+            bitrixSaveBtn.addEventListener('click', () => {
+                this.saveBitrixSettings();
+            });
+        }
+        const bitrixLoadFieldsBtn = document.getElementById('bitrixLoadFieldsBtn');
+        if (bitrixLoadFieldsBtn) {
+            bitrixLoadFieldsBtn.addEventListener('click', () => {
+                this.loadBitrixFieldsAndMapping();
+            });
+        }
+        const bitrixSaveMappingBtn = document.getElementById('bitrixSaveMappingBtn');
+        if (bitrixSaveMappingBtn) {
+            bitrixSaveMappingBtn.addEventListener('click', () => {
+                this.saveBitrixMapping();
+            });
+        }
+        const amoLoadFieldsBtn = document.getElementById('amoLoadFieldsBtn');
+        if (amoLoadFieldsBtn) {
+            amoLoadFieldsBtn.addEventListener('click', () => {
+                this.loadAmoFieldsAndMapping();
+            });
+        }
+        const amoSaveMappingBtn = document.getElementById('amoSaveMappingBtn');
+        if (amoSaveMappingBtn) {
+            amoSaveMappingBtn.addEventListener('click', () => {
+                this.saveAmoMapping();
+            });
+        }
 
         // Theme switcher
         const themeSwitch = document.getElementById('themeSwitch');
@@ -254,6 +284,9 @@ class UserDashboard {
                     this.displaySettings(data.data);
                     this.loadAmoStatus(); // после загрузки настроек
                     this.loadAmoSettings(); // загрузим BYOA поля
+                    this.loadBitrixSettings(); // загрузим Bitrix поля
+                    // Предзагрузка маппингов (молча)
+                    this.prefetchMappings();
                 }
             }
         } catch (error) {
@@ -261,6 +294,189 @@ class UserDashboard {
         }
     }
 
+    async prefetchMappings() {
+        // Пытаемся получить и отрисовать, если уже есть сохранённые маппинги
+        try {
+            const [bFieldsResp, bMapResp] = await Promise.all([
+                fetch('/user/integrations/bitrix/fields', { credentials: 'include' }),
+                fetch('/user/integrations/bitrix/mapping', { credentials: 'include' })
+            ]);
+            if (bFieldsResp.ok && bMapResp.ok) {
+                const fields = await bFieldsResp.json();
+                const mapping = await bMapResp.json();
+                this.renderBitrixMapping(fields.data || [], mapping.data || {});
+            }
+        } catch (_) {}
+        try {
+            const [aFieldsResp, aMapResp] = await Promise.all([
+                fetch('/user/integrations/amocrm/fields', { credentials: 'include' }),
+                fetch('/user/integrations/amocrm/mapping', { credentials: 'include' })
+            ]);
+            if (aFieldsResp.ok && aMapResp.ok) {
+                const fields = await aFieldsResp.json();
+                const mapping = await aMapResp.json();
+                this.renderAmoMapping(fields.data || [], mapping.data || {});
+            }
+        } catch (_) {}
+    }
+
+    // ===== Bitrix mapping UI =====
+    async loadBitrixFieldsAndMapping() {
+        try {
+            const [fieldsResp, mapResp] = await Promise.all([
+                fetch('/user/integrations/bitrix/fields', { credentials: 'include' }),
+                fetch('/user/integrations/bitrix/mapping', { credentials: 'include' })
+            ]);
+            if (!fieldsResp.ok) {
+                alert('Не удалось загрузить поля Bitrix');
+                return;
+            }
+            const fieldsData = await fieldsResp.json();
+            const mappingData = mapResp.ok ? await mapResp.json() : { data: {} };
+            this.renderBitrixMapping(fieldsData.data || [], mappingData.data || {});
+        } catch (e) {
+            alert('Ошибка загрузки полей Bitrix');
+        }
+    }
+
+    renderBitrixMapping(fields, conf) {
+        const container = document.getElementById('bitrixFieldsMapping');
+        if (!container) return;
+        // Подготовим опции
+        const selects = [1,2,3,4,5].map(i => document.getElementById(`bitrixMap${i}`));
+        const mkOption = (value, label) => {
+            const opt = document.createElement('option');
+            opt.value = value;
+            opt.textContent = label;
+            return opt;
+        };
+        const fillSelect = (selectEl) => {
+            if (!selectEl) return;
+            selectEl.innerHTML = '';
+            selectEl.appendChild(mkOption('', '— не заполнять —'));
+            // стандартные часто используемые
+            selectEl.appendChild(mkOption('OPPORTUNITY', 'OPPORTUNITY (сумма)'));
+            selectEl.appendChild(mkOption('TITLE', 'TITLE (заголовок)'));
+            selectEl.appendChild(mkOption('COMMENTS', 'COMMENTS (комментарии)'));
+            // поля из Bitrix
+            (fields || []).forEach(f => {
+                selectEl.appendChild(mkOption(f.code, `${f.title || f.code} [${f.code}]`));
+            });
+        };
+        selects.forEach(fillSelect);
+        // Проставим сохранённые значения
+        const map = (conf && conf.lead_field_map_by_index) || {};
+        [1,2,3,4,5].forEach(i => {
+            const key = String(i);
+            const selectEl = document.getElementById(`bitrixMap${i}`);
+            if (selectEl && map[key]) {
+                selectEl.value = map[key];
+            }
+        });
+        container.style.display = 'block';
+    }
+
+    async saveBitrixMapping() {
+        const map = {};
+        [1,2,3,4,5].forEach(i => {
+            const v = (document.getElementById(`bitrixMap${i}`) || {}).value || '';
+            if (v) map[String(i)] = v;
+        });
+        try {
+            const r = await fetch('/user/integrations/bitrix/mapping', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ lead_field_map_by_index: map })
+            });
+            const data = await r.json();
+            if (r.ok && data.status === 'success') {
+                alert('Маппинг Bitrix сохранён');
+            } else {
+                alert('Ошибка сохранения маппинга Bitrix');
+            }
+        } catch (e) {
+            alert('Ошибка сети при сохранении маппинга Bitrix');
+        }
+    }
+
+    // ===== amoCRM mapping UI =====
+    async loadAmoFieldsAndMapping() {
+        try {
+            const [fieldsResp, mapResp] = await Promise.all([
+                fetch('/user/integrations/amocrm/fields', { credentials: 'include' }),
+                fetch('/user/integrations/amocrm/mapping', { credentials: 'include' })
+            ]);
+            if (!fieldsResp.ok) {
+                alert('Не удалось загрузить поля amoCRM');
+                return;
+            }
+            const fieldsData = await fieldsResp.json();
+            const mappingData = mapResp.ok ? await mapResp.json() : { data: {} };
+            this.renderAmoMapping(fieldsData.data || [], mappingData.data || {});
+        } catch (e) {
+            alert('Ошибка загрузки полей amoCRM');
+        }
+    }
+
+    renderAmoMapping(fields, conf) {
+        const container = document.getElementById('amoFieldsMapping');
+        if (!container) return;
+        const selects = [1,2,3,4,5].map(i => document.getElementById(`amoMap${i}`));
+        const mkOption = (value, label) => {
+            const opt = document.createElement('option');
+            opt.value = value;
+            opt.textContent = label;
+            return opt;
+        };
+        const fillSelect = (selectEl) => {
+            if (!selectEl) return;
+            selectEl.innerHTML = '';
+            selectEl.appendChild(mkOption('', '— не заполнять —'));
+            // стандартные
+            selectEl.appendChild(mkOption('name', 'name (Название сделки)'));
+            selectEl.appendChild(mkOption('price', 'price (Бюджет)'));
+            (fields || []).forEach(f => {
+                if (f.scope === 'custom') {
+                    selectEl.appendChild(mkOption(`cf:${f.id}`, `${f.name} [${f.id}]`));
+                }
+            });
+        };
+        selects.forEach(fillSelect);
+        const map = (conf && conf.lead_field_map_by_index) || {};
+        [1,2,3,4,5].forEach(i => {
+            const key = String(i);
+            const selectEl = document.getElementById(`amoMap${i}`);
+            if (selectEl && map[key]) {
+                selectEl.value = map[key];
+            }
+        });
+        container.style.display = 'block';
+    }
+
+    async saveAmoMapping() {
+        const map = {};
+        [1,2,3,4,5].forEach(i => {
+            const v = (document.getElementById(`amoMap${i}`) || {}).value || '';
+            if (v) map[String(i)] = v;
+        });
+        try {
+            const r = await fetch('/user/integrations/amocrm/mapping', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ lead_field_map_by_index: map })
+            });
+            const data = await r.json();
+            if (r.ok && data.status === 'success') {
+                alert('Маппинг amoCRM сохранён');
+            } else {
+                alert('Ошибка сохранения маппинга amoCRM');
+            }
+        } catch (e) {
+            alert('Ошибка сети при сохранении маппинга amoCRM');
+        }
+    }
     displaySettings(settings) {
         // Получаем список разрешенных форматов
         const outputFormats = settings.output_formats || ['csv', 'xlsx', 'json'];
@@ -417,6 +633,45 @@ class UserDashboard {
             window.location.href = '/user/amocrm/connect';
         } catch (e) {
             alert('Не удалось проверить настройки amoCRM');
+        }
+    }
+
+    async loadBitrixSettings() {
+        try {
+            const r = await fetch('/user/integrations/bitrix/settings', { credentials: 'include' });
+            if (!r.ok) return;
+            const data = await r.json();
+            const s = data.data || {};
+            document.getElementById('bitrixWebhookBase').value = s.webhook_base || '';
+        } catch (e) {
+            console.warn('Не удалось загрузить настройки Bitrix', e);
+        }
+    }
+
+    async saveBitrixSettings() {
+        const webhookBase = document.getElementById('bitrixWebhookBase').value.trim();
+        if (!webhookBase) {
+            alert('Введите базовый URL вебхука Bitrix');
+            return;
+        }
+        try {
+            const r = await fetch('/user/integrations/bitrix/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                    webhook_base: webhookBase,
+                    enabled: true
+                })
+            });
+            const data = await r.json();
+            if (r.ok && data.status === 'success') {
+                alert('Настройки Bitrix сохранены');
+            } else {
+                alert('Ошибка сохранения Bitrix: ' + (data.message || ''));
+            }
+        } catch (e) {
+            alert('Ошибка сети при сохранении настроек Bitrix');
         }
     }
 

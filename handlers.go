@@ -828,8 +828,9 @@ func tryDispatchIntegrations(userEmail, text string) {
 	if metadata != "" {
 		_ = json.Unmarshal([]byte(metadata), &settings)
 	}
-	// Проверим, включен ли amoCRM
+	// Проверим тумблеры направлений
 	amocrmEnabled := false
+	bitrixEnabled := false
 	if v, ok := settings["destinations"]; ok {
 		if m, ok2 := v.(map[string]interface{}); ok2 {
 			if raw, ok3 := m["amocrm"]; ok3 {
@@ -837,37 +838,131 @@ func tryDispatchIntegrations(userEmail, text string) {
 					amocrmEnabled = true
 				}
 			}
+			if raw, ok3 := m["bitrix"]; ok3 {
+				if b, ok4 := raw.(bool); ok4 && b {
+					bitrixEnabled = true
+				}
+			}
 		}
 	}
-	if !amocrmEnabled || !isAmoConfigured() {
-		return
-	}
-	// Получим customer_id и токены
+	// Получим customer_id
 	customerID, err := getCustomerIDByEmail(userEmail)
 	if err != nil || customerID == "" {
 		return
 	}
-	// Дополнительно проверим, что интеграция включена в user_integrations
-	var enabled bool
-	row = db.QueryRow(`select enabled from user_integrations where user_id=$1 and provider='amocrm'`, customerID)
-	_ = row.Scan(&enabled)
-	if !enabled {
-		return
+	// amoCRM
+	if amocrmEnabled && isAmoConfigured() {
+		var enabled bool
+		row = db.QueryRow(`select enabled from user_integrations where user_id=$1 and provider='amocrm'`, customerID)
+		_ = row.Scan(&enabled)
+		if enabled {
+			// Попробуем применить маппинг полей
+			var cfgJSON string
+			row = db.QueryRow(`select coalesce(config::text,'{}') from user_integrations where user_id=$1 and provider='amocrm'`, customerID)
+			_ = row.Scan(&cfgJSON)
+			lines := strings.Split(text, "\n")
+			lead := map[string]interface{}{
+				"name": truncateString("Document AI: "+text, 200),
+			}
+			type cfVal struct {
+				FieldID int64                    `json:"field_id"`
+				Values  []map[string]interface{} `json:"values"`
+			}
+			var customFields []cfVal
+			if cfgJSON != "" {
+				var conf map[string]interface{}
+				if err := json.Unmarshal([]byte(cfgJSON), &conf); err == nil {
+					if raw, ok := conf["lead_field_map_by_index"]; ok {
+						if mp, ok2 := raw.(map[string]interface{}); ok2 {
+							for idxStr, dest := range mp {
+								destStr, _ := dest.(string)
+								if destStr == "" {
+									continue
+								}
+								if i, err := strconv.Atoi(idxStr); err == nil && i > 0 && i <= len(lines) {
+									val := strings.TrimSpace(lines[i-1])
+									if val == "" {
+										continue
+									}
+									// standard fields
+									if destStr == "name" {
+										lead["name"] = truncateString(val, 200)
+										continue
+									}
+									if destStr == "price" {
+										lead["price"] = val
+										continue
+									}
+									// custom field cf:<id>
+									if strings.HasPrefix(destStr, "cf:") {
+										idStr := strings.TrimPrefix(destStr, "cf:")
+										if fid, err := strconv.ParseInt(idStr, 10, 64); err == nil && fid > 0 {
+											customFields = append(customFields, cfVal{
+												FieldID: fid,
+												Values:  []map[string]interface{}{{"value": val}},
+											})
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			if len(customFields) > 0 {
+				lead["custom_fields_values"] = customFields
+			}
+			bodyBytes, _ := json.Marshal([]interface{}{lead}) // v4 требует массив
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			if resp, err := amoAPIRequestForCustomer(ctx, customerID, http.MethodPost, "/api/v4/leads", bytes.NewReader(bodyBytes)); err == nil && resp != nil {
+				_ = resp.Body.Close()
+			}
+		}
 	}
-	// Создадим простую сделку с именем, содержащим результат (усечённый)
-	name := truncateString("Document AI: "+text, 200)
-	payload := map[string]interface{}{
-		"name": name,
+	// Bitrix24
+	if bitrixEnabled && isBitrixConfigured() {
+		cfg, _ := loadCustomerBitrixConfig(context.Background(), customerID)
+		if cfg.Enabled && strings.TrimSpace(cfg.WebhookBase) != "" {
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			// Сформируем поля для лида с учетом маппинга
+			fields := map[string]interface{}{
+				"TITLE":    truncateString("Document AI", 128),
+				"COMMENTS": truncateString(text, 4000),
+			}
+			// Попробуем прочитать конфиг маппинга
+			var cfgEnabled bool
+			var cfgJSON string
+			row := db.QueryRow(`select enabled, coalesce(config::text,'{}') from user_integrations where user_id=$1 and provider='bitrix'`, customerID)
+			_ = row.Scan(&cfgEnabled, &cfgJSON)
+			if cfgEnabled && cfgJSON != "" {
+				var conf map[string]interface{}
+				if err := json.Unmarshal([]byte(cfgJSON), &conf); err == nil {
+					if raw, ok := conf["lead_field_map_by_index"]; ok {
+						if mp, ok2 := raw.(map[string]interface{}); ok2 {
+							// text -> строки по индексам
+							lines := strings.Split(text, "\n")
+							for idxStr, fieldCodeRaw := range mp {
+								fieldCode, _ := fieldCodeRaw.(string)
+								if fieldCode == "" {
+									continue
+								}
+								// индекс 1..N
+								if i, err := strconv.Atoi(idxStr); err == nil && i > 0 && i <= len(lines) {
+									val := strings.TrimSpace(lines[i-1])
+									if val != "" {
+										fields[fieldCode] = val
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			_ = sendBitrixLead(ctx, cfg.WebhookBase, fields)
+		}
 	}
-	bodyBytes, _ := json.Marshal([]interface{}{payload}) // v4 требует массив
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	resp, err := amoAPIRequestForCustomer(ctx, customerID, http.MethodPost, "/api/v4/leads", bytes.NewReader(bodyBytes))
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-	// игнорируем результат/ошибки тела для простоты; при необходимости можно логировать
 }
 
 func isValidFileType(filename string) bool {

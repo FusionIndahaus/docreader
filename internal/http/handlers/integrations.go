@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	amocrmpkg "document-ai/internal/integrations/amocrm"
 	bitrixpkg "document-ai/internal/integrations/bitrix"
+	onecpkg "document-ai/internal/integrations/onec"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -71,6 +72,29 @@ func RegisterIntegrationUserRoutes(mux *http.ServeMux, d IntegrationsDeps) {
 			handleUserBitrixMappingGet(w, r, d)
 		case http.MethodPut:
 			handleUserBitrixMappingPut(w, r, d)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}))
+
+	// 1C settings
+	mux.HandleFunc("/user/integrations/1c/settings", d.RequireUser(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			handleUserOneCSettingsGet(w, r, d)
+		case http.MethodPut:
+			handleUserOneCSettingsPut(w, r, d)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}))
+	// 1C mapping
+	mux.HandleFunc("/user/integrations/1c/mapping", d.RequireUser(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			handleUserOneCMappingGet(w, r, d)
+		case http.MethodPut:
+			handleUserOneCMappingPut(w, r, d)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -548,6 +572,220 @@ func handleUserAmoMappingPut(w http.ResponseWriter, r *http.Request, d Integrati
 	_, err = d.DB.Exec(`
 		insert into user_integrations(id, user_id, provider, enabled, account_domain, credentials, config)
 		values(gen_random_uuid(), $1, 'amocrm', true, '', '{}'::jsonb, $2::jsonb)
+		on conflict (user_id, provider) do update set
+			config = excluded.config,
+			updated_at = now()
+	`, customerID, string(confJSON))
+	if err != nil {
+		d.SendJSONError(w, "save failed", http.StatusInternalServerError)
+		return
+	}
+	d.SendJSONResponse(w, APIResponse{Status: "success"})
+}
+
+// ----- 1C (BYOA) -----
+
+func handleUserOneCSettingsGet(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
+	c, err := r.Cookie("user_session")
+	if err != nil || c.Value == "" || d.GetUserEmail(c.Value) == "" {
+		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	email := d.GetUserEmail(c.Value)
+	if d.DB == nil {
+		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
+		return
+	}
+	customerID, err := d.GetCustomerIDByEmail(email)
+	if err != nil || customerID == "" {
+		d.SendJSONError(w, "user not found", http.StatusNotFound)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	cfg, _ := onecpkg.LoadUserConfig(ctx, d.DB, customerID)
+	cred, _ := onecpkg.LoadCredentials(ctx, d.DB, customerID)
+	// маскируем секреты
+	respCred := map[string]interface{}{
+		"auth_type": cred.AuthType,
+	}
+	if cred.Username != "" {
+		respCred["username"] = cred.Username
+	}
+	if cred.Password != "" {
+		respCred["password"] = "***"
+	}
+	if cred.Token != "" {
+		respCred["token"] = "***"
+	}
+	d.SendJSONResponse(w, APIResponse{
+		Status: "success",
+		Data: map[string]interface{}{
+			"enabled":       cfg.Enabled,
+			"base_url":      cfg.BaseURL,
+			"endpoint_path": cfg.EndpointPath,
+			"credentials":   respCred,
+		},
+	})
+}
+
+func handleUserOneCSettingsPut(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
+	c, err := r.Cookie("user_session")
+	if err != nil || c.Value == "" || d.GetUserEmail(c.Value) == "" {
+		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	email := d.GetUserEmail(c.Value)
+	if d.DB == nil {
+		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
+		return
+	}
+	customerID, err := d.GetCustomerIDByEmail(email)
+	if err != nil || customerID == "" {
+		d.SendJSONError(w, "user not found", http.StatusNotFound)
+		return
+	}
+	var p struct {
+		Enabled      *bool   `json:"enabled"`
+		BaseURL      string  `json:"base_url"`
+		EndpointPath *string `json:"endpoint_path"`
+		AuthType     string  `json:"auth_type"` // none|basic|bearer
+		Username     string  `json:"username"`
+		Password     string  `json:"password"`
+		Token        string  `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		d.SendJSONError(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	baseURL := strings.TrimRight(strings.TrimSpace(p.BaseURL), "/")
+	if baseURL == "" {
+		d.SendJSONError(w, "base_url is required", http.StatusBadRequest)
+		return
+	}
+	enabled := true
+	if p.Enabled != nil {
+		enabled = *p.Enabled
+	}
+	// merge config
+	var currentConfStr string
+	row := d.DB.QueryRow(`select coalesce(config::text,'{}') from user_integrations where user_id=$1 and provider='1c'`, customerID)
+	_ = row.Scan(&currentConfStr)
+	var conf map[string]interface{}
+	if currentConfStr != "" {
+		_ = json.Unmarshal([]byte(currentConfStr), &conf)
+	}
+	if conf == nil {
+		conf = map[string]interface{}{}
+	}
+	if p.EndpointPath != nil {
+		conf["endpoint_path"] = strings.TrimSpace(*p.EndpointPath)
+	}
+	confJSON, _ := json.Marshal(conf)
+	// credentials
+	authType := strings.ToLower(strings.TrimSpace(p.AuthType))
+	if authType == "" {
+		authType = "none"
+	}
+	creds := map[string]interface{}{
+		"auth_type": authType,
+	}
+	if authType == "basic" {
+		creds["username"] = strings.TrimSpace(p.Username)
+		creds["password"] = p.Password
+	} else if authType == "bearer" {
+		creds["token"] = p.Token
+	}
+	credsJSON, _ := json.Marshal(creds)
+	_, err = d.DB.Exec(`
+		INSERT INTO user_integrations(id, user_id, provider, enabled, account_domain, credentials, config)
+		VALUES(gen_random_uuid(), $1, '1c', $2, $3, $4::jsonb, $5::jsonb)
+		ON CONFLICT (user_id, provider) DO UPDATE SET
+			enabled        = EXCLUDED.enabled,
+			account_domain = EXCLUDED.account_domain,
+			credentials    = EXCLUDED.credentials,
+			config         = EXCLUDED.config,
+			updated_at     = now()
+	`, customerID, enabled, baseURL, string(credsJSON), string(confJSON))
+	if err != nil {
+		d.SendJSONError(w, "save failed", http.StatusInternalServerError)
+		return
+	}
+	d.SendJSONResponse(w, APIResponse{Status: "success"})
+}
+
+func handleUserOneCMappingGet(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
+	c, err := r.Cookie("user_session")
+	if err != nil || c.Value == "" || d.GetUserEmail(c.Value) == "" {
+		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	email := d.GetUserEmail(c.Value)
+	if d.DB == nil {
+		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
+		return
+	}
+	customerID, err := d.GetCustomerIDByEmail(email)
+	if err != nil || customerID == "" {
+		d.SendJSONError(w, "user not found", http.StatusNotFound)
+		return
+	}
+	var configJSON string
+	row := d.DB.QueryRow(`
+		select coalesce(config::text,'{}')
+		from user_integrations
+		where user_id=$1 and provider='1c'
+	`, customerID)
+	_ = row.Scan(&configJSON)
+	var conf map[string]interface{}
+	_ = json.Unmarshal([]byte(configJSON), &conf)
+	if conf == nil {
+		conf = map[string]interface{}{}
+	}
+	d.SendJSONResponse(w, APIResponse{Status: "success", Data: conf})
+}
+
+func handleUserOneCMappingPut(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
+	c, err := r.Cookie("user_session")
+	if err != nil || c.Value == "" || d.GetUserEmail(c.Value) == "" {
+		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	email := d.GetUserEmail(c.Value)
+	if d.DB == nil {
+		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
+		return
+	}
+	customerID, err := d.GetCustomerIDByEmail(email)
+	if err != nil || customerID == "" {
+		d.SendJSONError(w, "user not found", http.StatusNotFound)
+		return
+	}
+	var body map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		d.SendJSONError(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	var current string
+	row := d.DB.QueryRow(`select coalesce(config::text,'{}') from user_integrations where user_id=$1 and provider='1c'`, customerID)
+	_ = row.Scan(&current)
+	var conf map[string]interface{}
+	if current != "" {
+		_ = json.Unmarshal([]byte(current), &conf)
+	}
+	if conf == nil {
+		conf = map[string]interface{}{}
+	}
+	if m, ok := body["json_field_map_by_index"]; ok {
+		conf["json_field_map_by_index"] = m
+	}
+	if ep, ok := body["endpoint_path"].(string); ok {
+		conf["endpoint_path"] = strings.TrimSpace(ep)
+	}
+	confJSON, _ := json.Marshal(conf)
+	_, err = d.DB.Exec(`
+		insert into user_integrations(id, user_id, provider, enabled, account_domain, credentials, config)
+		values(gen_random_uuid(), $1, '1c', true, '', '{}'::jsonb, $2::jsonb)
 		on conflict (user_id, provider) do update set
 			config = excluded.config,
 			updated_at = now()

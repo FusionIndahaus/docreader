@@ -62,6 +62,36 @@ class UserDashboard {
                 this.saveBitrixMapping();
             });
         }
+        const onecSaveBtn = document.getElementById('onecSaveSettingsBtn');
+        if (onecSaveBtn) {
+            onecSaveBtn.addEventListener('click', () => {
+                this.saveOneCSettings();
+            });
+        }
+        const onecLoadMappingBtn = document.getElementById('onecLoadMappingBtn');
+        if (onecLoadMappingBtn) {
+            onecLoadMappingBtn.addEventListener('click', () => {
+                this.loadOneCMapping();
+            });
+        }
+        const onecSaveMappingBtn = document.getElementById('onecSaveMappingBtn');
+        if (onecSaveMappingBtn) {
+            onecSaveMappingBtn.addEventListener('click', () => {
+                this.saveOneCMapping();
+            });
+        }
+        const onecAddRowBtn = document.getElementById('onecAddRowBtn');
+        if (onecAddRowBtn) {
+            onecAddRowBtn.addEventListener('click', () => {
+                this.addOneCRow();
+            });
+        }
+        const onecAuthType = document.getElementById('onecAuthType');
+        if (onecAuthType) {
+            onecAuthType.addEventListener('change', () => {
+                this.updateOneCAuthVisibility();
+            });
+        }
         const bitrixAddRowBtn = document.getElementById('bitrixAddRowBtn');
         if (bitrixAddRowBtn) {
             bitrixAddRowBtn.addEventListener('click', () => {
@@ -291,6 +321,7 @@ class UserDashboard {
                     this.loadAmoStatus(); // после загрузки настроек
                     this.loadAmoSettings(); // загрузим BYOA поля
                     this.loadBitrixSettings(); // загрузим Bitrix поля
+                    this.loadOneCSettings(); // загрузим 1C поля
                     // Предзагрузка маппингов (молча)
                     this.prefetchMappings();
                 }
@@ -523,6 +554,179 @@ class UserDashboard {
             this.renderAmoMapping(fieldsData.data || [], mappingData.data || {});
         } catch (e) {
             alert('Ошибка загрузки полей amoCRM');
+        }
+    }
+
+    // ===== 1C (BYOA) =====
+    updateOneCAuthVisibility() {
+        const t = (document.getElementById('onecAuthType') || {}).value || 'none';
+        const basic = document.getElementById('onecAuthBasic');
+        const bearer = document.getElementById('onecAuthBearer');
+        if (basic) basic.style.display = (t === 'basic') ? '' : 'none';
+        if (bearer) bearer.style.display = (t === 'bearer') ? '' : 'none';
+    }
+
+    async loadOneCSettings() {
+        try {
+            const r = await fetch('/user/integrations/1c/settings', { credentials: 'include' });
+            if (!r.ok) return;
+            const data = await r.json();
+            const s = data.data || {};
+            document.getElementById('onecBaseUrl').value = s.base_url || '';
+            document.getElementById('onecEndpointPath').value = s.endpoint_path || '';
+            const creds = s.credentials || {};
+            const authType = creds.auth_type || 'none';
+            const sel = document.getElementById('onecAuthType');
+            if (sel) sel.value = authType;
+            document.getElementById('onecUsername').value = creds.username || '';
+            document.getElementById('onecPassword').value = ''; // не подставляем
+            document.getElementById('onecToken').value = '';
+            this.updateOneCAuthVisibility();
+        } catch (e) {
+            console.warn('Не удалось загрузить настройки 1С', e);
+        }
+    }
+
+    async saveOneCSettings() {
+        const baseUrl = (document.getElementById('onecBaseUrl') || {}).value.trim();
+        const endpointPath = (document.getElementById('onecEndpointPath') || {}).value.trim();
+        const authType = ((document.getElementById('onecAuthType') || {}).value || 'none').trim();
+        const username = (document.getElementById('onecUsername') || {}).value.trim();
+        const password = (document.getElementById('onecPassword') || {}).value;
+        const token = (document.getElementById('onecToken') || {}).value;
+        if (!baseUrl) {
+            alert('Введите базовый URL 1С');
+            return;
+        }
+        const body = {
+            enabled: true,
+            base_url: baseUrl,
+            auth_type: authType
+        };
+        if (endpointPath) body.endpoint_path = endpointPath;
+        if (authType === 'basic') {
+            body.username = username;
+            body.password = password;
+        } else if (authType === 'bearer') {
+            body.token = token;
+        }
+        try {
+            const r = await fetch('/user/integrations/1c/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(body)
+            });
+            const data = await r.json();
+            if (r.ok && data.status === 'success') {
+                alert('Настройки 1С сохранены');
+                // очистим секретные поля
+                document.getElementById('onecPassword').value = '';
+                document.getElementById('onecToken').value = '';
+            } else {
+                alert('Ошибка сохранения 1С: ' + (data.message || ''));
+            }
+        } catch (e) {
+            alert('Ошибка сети при сохранении настроек 1С');
+        }
+    }
+
+    async loadOneCMapping() {
+        try {
+            const r = await fetch('/user/integrations/1c/mapping', { credentials: 'include' });
+            if (!r.ok) {
+                alert('Не удалось загрузить маппинг 1С');
+                return;
+            }
+            const data = await r.json();
+            this.renderOneCMapping(data.data || {});
+        } catch (e) {
+            alert('Ошибка загрузки маппинга 1С');
+        }
+    }
+
+    renderOneCMapping(conf) {
+        const container = document.getElementById('onecFieldsMapping');
+        if (!container) return;
+        const rowsWrap = document.getElementById('onecMappingRows');
+        const map = (conf && conf.json_field_map_by_index) || {};
+        const getRowCountFromConf = (m) => {
+            const keys = Object.keys(m || {}).map(k => parseInt(k, 10)).filter(n => !isNaN(n));
+            return keys.length ? Math.max(...keys) : 0;
+        };
+        const desiredRows = Math.max(5, getRowCountFromConf(map));
+        if (rowsWrap) {
+            rowsWrap.innerHTML = '';
+            for (let i = 1; i <= desiredRows; i++) {
+                const row = document.createElement('div');
+                row.className = 'mapping-row';
+                const label = document.createElement('label');
+                label.textContent = `Значение ${i} →`;
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.id = `onecMap${i}`;
+                input.setAttribute('data-index', String(i));
+                input.placeholder = 'ключ JSON';
+                row.appendChild(label);
+                row.appendChild(input);
+                rowsWrap.appendChild(row);
+                const key = String(i);
+                if (map[key]) {
+                    input.value = map[key];
+                }
+            }
+        }
+        container.style.display = 'block';
+    }
+
+    addOneCRow() {
+        const rowsWrap = document.getElementById('onecMappingRows');
+        if (!rowsWrap) return;
+        const nextIndex = (rowsWrap.querySelectorAll('input[type="text"]').length || 0) + 1;
+        const row = document.createElement('div');
+        row.className = 'mapping-row';
+        const label = document.createElement('label');
+        label.textContent = `Значение ${nextIndex} →`;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.id = `onecMap${nextIndex}`;
+        input.setAttribute('data-index', String(nextIndex));
+        input.placeholder = 'ключ JSON';
+        row.appendChild(label);
+        row.appendChild(input);
+        rowsWrap.appendChild(row);
+    }
+
+    async saveOneCMapping() {
+        const rowsWrap = document.getElementById('onecMappingRows');
+        const inputs = rowsWrap ? Array.from(rowsWrap.querySelectorAll('input[type="text"]')) : [];
+        const map = {};
+        inputs.forEach(inp => {
+            const idx = inp.getAttribute('data-index') || '';
+            const v = (inp.value || '').trim();
+            if (idx && v) {
+                map[idx] = v;
+            }
+        });
+        // endpoint_path можно менять и здесь при желании
+        const endpointPath = (document.getElementById('onecEndpointPath') || {}).value.trim();
+        const body = { json_field_map_by_index: map };
+        if (endpointPath) body.endpoint_path = endpointPath;
+        try {
+            const r = await fetch('/user/integrations/1c/mapping', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(body)
+            });
+            const data = await r.json();
+            if (r.ok && data.status === 'success') {
+                alert('Маппинг 1С сохранён');
+            } else {
+                alert('Ошибка сохранения маппинга 1С');
+            }
+        } catch (e) {
+            alert('Ошибка сети при сохранении маппинга 1С');
         }
     }
 

@@ -12,6 +12,7 @@ import (
 
 	amocrmpkg "document-ai/internal/integrations/amocrm"
 	bitrixpkg "document-ai/internal/integrations/bitrix"
+	onecpkg "document-ai/internal/integrations/onec"
 )
 
 type Dispatcher struct {
@@ -34,6 +35,7 @@ func (d Dispatcher) Dispatch(userEmail, text string) {
 	}
 	amocrmEnabled := false
 	bitrixEnabled := false
+	onecEnabled := false
 	if v, ok := settings["destinations"]; ok {
 		if m, ok2 := v.(map[string]interface{}); ok2 {
 			if raw, ok3 := m["amocrm"]; ok3 {
@@ -44,6 +46,11 @@ func (d Dispatcher) Dispatch(userEmail, text string) {
 			if raw, ok3 := m["bitrix"]; ok3 {
 				if b, ok4 := raw.(bool); ok4 && b {
 					bitrixEnabled = true
+				}
+			}
+			if raw, ok3 := m["1c"]; ok3 {
+				if b, ok4 := raw.(bool); ok4 && b {
+					onecEnabled = true
 				}
 			}
 		}
@@ -176,6 +183,48 @@ func (d Dispatcher) Dispatch(userEmail, text string) {
 			} else {
 				_ = bitrixpkg.SendLead(ctx, cfg.WebhookBase, fields)
 			}
+		}
+	}
+	// 1C (BYOA)
+	if onecEnabled {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		cfg, _ := onecpkg.LoadUserConfig(ctx, d.DB, customerID)
+		if cfg.Enabled && strings.TrimSpace(cfg.BaseURL) != "" {
+			cred, _ := onecpkg.LoadCredentials(ctx, d.DB, customerID)
+			// базовый payload
+			lines := strings.Split(text, "\n")
+			payload := map[string]interface{}{
+				"text":  text,
+				"lines": lines,
+			}
+			// применяем маппинг индексов к JSON-ключам
+			var cfgEnabled bool
+			var cfgJSON string
+			row := d.DB.QueryRow(`select enabled, coalesce(config::text,'{}') from user_integrations where user_id=$1 and provider='1c'`, customerID)
+			_ = row.Scan(&cfgEnabled, &cfgJSON)
+			if cfgEnabled && cfgJSON != "" {
+				var conf map[string]interface{}
+				if err := json.Unmarshal([]byte(cfgJSON), &conf); err == nil {
+					if raw, ok := conf["json_field_map_by_index"]; ok {
+						if mp, ok2 := raw.(map[string]interface{}); ok2 {
+							for idxStr, fieldKeyRaw := range mp {
+								fieldKey, _ := fieldKeyRaw.(string)
+								if fieldKey == "" {
+									continue
+								}
+								if i, err := strconv.Atoi(idxStr); err == nil && i > 0 && i <= len(lines) {
+									val := strings.TrimSpace(lines[i-1])
+									if val != "" {
+										payload[fieldKey] = val
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			_ = onecpkg.SendJSON(ctx, cfg, cred, payload)
 		}
 	}
 }

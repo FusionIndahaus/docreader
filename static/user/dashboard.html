@@ -252,6 +252,71 @@
                                     <button id="bitrixSaveMappingBtn" class="btn btn-primary" style="margin-top:8px;">Сохранить маппинг</button>
                                 </div>
                             </div>
+                            <div class="integration-form">
+                                <h4>Настройки 1С (BYOA)</h4>
+                                <div class="form-group">
+                                    <label for="onecBaseUrl">Базовый URL 1С (например, https://1c.company.ru)</label>
+                                    <input type="text" id="onecBaseUrl" placeholder="https://...">
+                                </div>
+                                <div class="form-group">
+                                    <label for="onecEndpointPath">Endpoint path (например, /hs/integration/doc)</label>
+                                    <input type="text" id="onecEndpointPath" placeholder="/hs/integration/doc">
+                                </div>
+                                <div class="form-group">
+                                    <label for="onecAuthType">Тип авторизации</label>
+                                    <select id="onecAuthType">
+                                        <option value="none">Без авторизации</option>
+                                        <option value="basic">Basic Auth</option>
+                                        <option value="bearer">Bearer Token</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" id="onecAuthBasic" style="display:none;">
+                                    <div class="form-group">
+                                        <label for="onecUsername">Username</label>
+                                        <input type="text" id="onecUsername" placeholder="username">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="onecPassword">Password</label>
+                                        <input type="password" id="onecPassword" placeholder="password">
+                                    </div>
+                                </div>
+                                <div class="form-group" id="onecAuthBearer" style="display:none;">
+                                    <label for="onecToken">Bearer token</label>
+                                    <input type="password" id="onecToken" placeholder="token">
+                                </div>
+                                <button id="onecSaveSettingsBtn" class="btn btn-primary">Сохранить настройки 1С</button>
+                                <div class="form-group" style="margin-top: 12px;">
+                                    <button id="onecLoadMappingBtn" class="btn btn-secondary">Настроить маппинг JSON</button>
+                                </div>
+                                <div id="onecFieldsMapping" class="form-group" style="display:none;">
+                                    <h5>Маппинг значений → ключи JSON (по порядку строк ответа)</h5>
+                                    <p class="muted">Например: 1 → contract_number, 2 → amount, 3 → manager</p>
+                                    <div id="onecMappingRows">
+                                        <div class="mapping-row">
+                                            <label>Значение 1 →</label>
+                                            <input type="text" id="onecMap1" data-index="1" placeholder="ключ JSON (например, contract_number)">
+                                        </div>
+                                        <div class="mapping-row">
+                                            <label>Значение 2 →</label>
+                                            <input type="text" id="onecMap2" data-index="2" placeholder="ключ JSON">
+                                        </div>
+                                        <div class="mapping-row">
+                                            <label>Значение 3 →</label>
+                                            <input type="text" id="onecMap3" data-index="3" placeholder="ключ JSON">
+                                        </div>
+                                        <div class="mapping-row">
+                                            <label>Значение 4 →</label>
+                                            <input type="text" id="onecMap4" data-index="4" placeholder="ключ JSON">
+                                        </div>
+                                        <div class="mapping-row">
+                                            <label>Значение 5 →</label>
+                                            <input type="text" id="onecMap5" data-index="5" placeholder="ключ JSON">
+                                        </div>
+                                    </div>
+                                    <button id="onecAddRowBtn" class="btn btn-secondary" style="margin-top:8px;">Добавить значение</button>
+                                    <button id="onecSaveMappingBtn" class="btn btn-primary" style="margin-top:8px;">Сохранить маппинг</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
 

@@ -62,8 +62,8 @@ func issueAdminSession(w http.ResponseWriter, email string, d AdminDeps) {
 		Value:    token,
 		HttpOnly: true,
 		Path:     "/",
-		Secure:   false,
-		SameSite: http.SameSiteLaxMode,
+		Secure:   cookieSecure,
+		SameSite: cookieSameSite,
 		Expires:  time.Now().Add(24 * time.Hour),
 	}
 	http.SetCookie(w, cookie)

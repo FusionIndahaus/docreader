@@ -12,6 +12,7 @@ import (
 	domain "document-ai/internal/domain"
 	authmw "document-ai/internal/http/middleware"
 	approuter "document-ai/internal/http/router"
+	handlers "document-ai/internal/http/handlers"
 	dbpkg "document-ai/internal/infra/db"
 	eventbus "document-ai/internal/infra/events"
 	sess "document-ai/internal/infra/session"
@@ -25,6 +26,7 @@ var appUsecase usecase.Service
 
 func main() {
 	initEnvVariables()
+	handlers.SetCookieConfig(cookieSecure, cookieSameSite)
 	if d, err := dbpkg.Init(dbDSN); err != nil {
 		println("WARNING: DB connect failed:", err.Error())
 	} else {
@@ -34,7 +36,11 @@ func main() {
 	// Routes
 	bus := eventbus.NewBus(&responses, &responsesMutex, &subscribers, &subscribersMux)
 	sessionStore := sess.NewStore(&userSessions, &userSessionsMux)
-	auth := authmw.Auth{GetUserEmail: sessionStore.GetUserEmail, AdminSessions: adminSessions}
+	auth := authmw.Auth{
+		GetUserEmail:  sessionStore.GetUserEmail,
+		AdminSessions: adminSessions,
+		ServiceAPIKey: serviceAPIKey,
+	}
 	appro := approuter.Deps{
 		StaticDir:            staticDir,
 		AdminSessions:        adminSessions,

@@ -36,12 +36,7 @@ func RegisterUploadRoutes(mux *http.ServeMux, d UploadDeps) {
 		}
 		// outputFormat сейчас не влияет на поведение
 		_ = strings.ToLower(strings.TrimSpace(r.FormValue("outputFormat")))
-		userEmail := ""
-		if c, err := r.Cookie("user_session"); err == nil && c.Value != "" {
-			if email := d.GetUserEmail(c.Value); email != "" {
-				userEmail = strings.ToLower(email)
-			}
-		}
+		userEmail := getRequestUserEmail(r, d.GetUserEmail)
 		batchID := strings.TrimSpace(r.FormValue("batchId"))
 		seqStr := strings.TrimSpace(r.FormValue("seq"))
 		seq := 0

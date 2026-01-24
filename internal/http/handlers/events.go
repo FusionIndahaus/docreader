@@ -18,7 +18,6 @@ func RegisterEventsRoute(mux *http.ServeMux, d EventsDeps) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("X-Accel-Buffering", "no")
 
 		flusher, ok := w.(http.Flusher)
@@ -27,12 +26,7 @@ func RegisterEventsRoute(mux *http.ServeMux, d EventsDeps) {
 			return
 		}
 
-		c, err := r.Cookie("user_session")
-		if err != nil || c.Value == "" {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		userEmail := d.GetUserEmail(c.Value)
+		userEmail := getRequestUserEmail(r, d.GetUserEmail)
 		if userEmail == "" {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return

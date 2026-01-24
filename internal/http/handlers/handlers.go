@@ -34,12 +34,11 @@ func RegisterAmoUserRoutes(mux *http.ServeMux, d Deps) {
 }
 
 func handleUserAmoStatus(w http.ResponseWriter, r *http.Request, d Deps) {
-	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || d.GetUserEmail(c.Value) == "" {
+	email := getRequestUserEmail(r, d.GetUserEmail)
+	if email == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	email := d.GetUserEmail(c.Value)
 	if !amocrmpkg.IsConfigured() {
 		d.SendJSONResponse(w, map[string]interface{}{"status": "success", "data": map[string]interface{}{"configured": false, "connected": false}})
 		return
@@ -68,8 +67,8 @@ func handleUserAmoStatus(w http.ResponseWriter, r *http.Request, d Deps) {
 }
 
 func handleUserAmoConnect(w http.ResponseWriter, r *http.Request, d Deps) {
-	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || d.GetUserEmail(c.Value) == "" {
+	email := getRequestUserEmail(r, d.GetUserEmail)
+	if email == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -83,11 +82,10 @@ func handleUserAmoConnect(w http.ResponseWriter, r *http.Request, d Deps) {
 		Value:    state,
 		HttpOnly: true,
 		Path:     "/",
-		Secure:   false,
-		SameSite: http.SameSiteLaxMode,
+		Secure:   cookieSecure,
+		SameSite: cookieSameSite,
 		Expires:  time.Now().Add(10 * time.Minute),
 	})
-	email := d.GetUserEmail(c.Value)
 	customerID, err := d.GetCustomerIDByEmail(email)
 	if err != nil || customerID == "" {
 		d.SendJSONError(w, "user not found", http.StatusBadRequest)
@@ -102,12 +100,11 @@ func handleUserAmoConnect(w http.ResponseWriter, r *http.Request, d Deps) {
 }
 
 func handleUserAmoOAuthCallback(w http.ResponseWriter, r *http.Request, d Deps) {
-	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || d.GetUserEmail(c.Value) == "" {
+	email := getRequestUserEmail(r, d.GetUserEmail)
+	if email == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	email := d.GetUserEmail(c.Value)
 	q := r.URL.Query()
 	code := strings.TrimSpace(q.Get("code"))
 	state := strings.TrimSpace(q.Get("state"))

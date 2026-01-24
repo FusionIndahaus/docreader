@@ -1,9 +1,6 @@
 package handlers
 
-import (
-	"net/http"
-	"strings"
-)
+import "net/http"
 
 type ResultsDeps struct {
 	RequireUser      func(http.HandlerFunc) http.HandlerFunc
@@ -15,12 +12,7 @@ type ResultsDeps struct {
 
 func RegisterResultsRoutes(mux *http.ServeMux, d ResultsDeps) {
 	mux.HandleFunc("/results", d.RequireUser(func(w http.ResponseWriter, r *http.Request) {
-		c, err := r.Cookie("user_session")
-		if err != nil || c.Value == "" {
-			d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		email := strings.ToLower(d.GetUserEmail(c.Value))
+		email := getRequestUserEmail(r, d.GetUserEmail)
 		if email == "" {
 			d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 			return

@@ -165,7 +165,7 @@ func handleUserProfileUpdate(w http.ResponseWriter, r *http.Request, d UserDeps)
 		d.SendJSONError(w, "invalid JSON", http.StatusBadRequest)
 		return
 	}
-	_, err = d.DB.Exec(`
+	_, err := d.DB.Exec(`
 		UPDATE customers 
 		SET name = $1, company = $2, updated_at = now()
 		WHERE deleted_at IS NULL AND lower(email) = lower($3)

@@ -24,6 +24,21 @@ func getEnv(key, def string) string {
 	return def
 }
 
+func getBoolEnv(key string, def bool) bool {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return def
+	}
+	switch strings.ToLower(v) {
+	case "1", "true", "yes", "y", "on":
+		return true
+	case "0", "false", "no", "n", "off":
+		return false
+	default:
+		return def
+	}
+}
+
 // safeCompareStrings делает сравнение строк в постоянное время
 func safeCompareStrings(a, b string) bool {
 	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1

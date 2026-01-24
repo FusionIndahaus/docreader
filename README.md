@@ -19,6 +19,17 @@ docker build -t document-ai .
 docker run -it --rm -p 8080:8080 document-ai
 ```
 
+Docker Compose (docreader + Postgres):
+```bash
+docker compose up -d --build
+```
+По умолчанию сеть называется `docreader-net` — это удобно, если основное приложение
+будет жить в другом compose-файле и ему нужно стучаться в docreader.
+
+Если основное приложение запускается отдельно:
+- подключите его к сети `docreader-net` (external)
+- используйте URL `http://docreader:8080` для вызовов в docreader
+
 Makefile (если лень помнить команды):
 ```bash
 make build   # go build -o document-ai .
@@ -40,6 +51,11 @@ make run     # собрать и стартануть
   - Local:   `postgres://appuser:apppass@localhost:5432/appdb?sslmode=disable`
 - `ADMIN_EMAIL`, `ADMIN_PASSWORD` — bootstrap-учётка для входа в админку
 - `SESSION_SECRET` — секрет подписи сессий (замените на случайный)
+- `DOCREADER_API_KEY` — сервисный ключ для вызовов из основного бэкенда
+- `CORS_ALLOWED_ORIGINS` — список доменов через запятую (например `https://app.example.com`)
+- `CORS_ALLOW_CREDENTIALS` — `true|false` (нужно `true`, если фронт использует cookies)
+- `COOKIE_SECURE` — `true|false` (в проде обычно `true`, если HTTPS)
+- `COOKIE_SAMESITE` — `lax|strict|none`
 
 Грузится в `config.go`. Логика в `handlers.go`. Ничего лишнего.
 
@@ -59,6 +75,15 @@ static/           # фронтенд (css/js/html)
   - form-data: `message` (string), `file` (pdf/jpg/png)
   - ответ: `{ status: "success", message: "..." }`
 
+Service-to-service (для основного бэкенда):
+```
+POST /upload
+Headers:
+  X-Docreader-Api-Key: <DOCREADER_API_KEY>
+  X-Docreader-User: user@example.com
+```
+Для пользовательских настроек/интеграций аналогично — прокидывайте `X-Docreader-User`.
+
 - `POST /webhook` (обратная совместимость)
   - остаётся для старых интеграций; новые запросы идут напрямую в Qwen
 
@@ -77,6 +102,11 @@ go build -ldflags="-s -w" -o document-ai .
 
 Скрипт деплоя: `deploy.sh` — деплой через Docker Compose (приложение + Nginx + Postgres + PgAdmin).
 Артефакты: `Dockerfile`, `docker-compose.yml`, `migrations/`.
+
+PgAdmin вынесен в профиль `tools` и не поднимается по умолчанию:
+```bash
+docker compose --profile tools up -d
+```
 
 После деплоя примените миграции (один раз):
 ```bash

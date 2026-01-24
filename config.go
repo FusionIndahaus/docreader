@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -24,11 +25,17 @@ var (
 	amoRedirectURI  string
 	amoBaseURL      string
 	// OpenRouter / Qwen
-	openRouterAPIKey  string
-	openRouterBaseURL string
-	openRouterModel   string
-	siteURL           string
-	siteTitle         string
+	openRouterAPIKey     string
+	openRouterBaseURL    string
+	openRouterModel      string
+	siteURL              string
+	siteTitle            string
+	serviceAPIKey        string
+	corsAllowedOrigins   []string
+	corsAllowAll         bool
+	corsAllowCredentials bool
+	cookieSecure         bool
+	cookieSameSite       http.SameSite
 )
 
 func initEnvVariables() {
@@ -107,4 +114,46 @@ func initEnvVariables() {
 	}
 	siteURL = strings.TrimSpace(os.Getenv("SITE_URL"))
 	siteTitle = strings.TrimSpace(os.Getenv("SITE_TITLE"))
+
+	serviceAPIKey = strings.TrimSpace(os.Getenv("DOCREADER_API_KEY"))
+	if serviceAPIKey == "" {
+		log.Printf("WARNING: DOCREADER_API_KEY не задан — service-to-service доступ отключен")
+	}
+
+	corsAllowedOrigins = parseCSVList(os.Getenv("CORS_ALLOWED_ORIGINS"))
+	for _, origin := range corsAllowedOrigins {
+		if origin == "*" {
+			corsAllowAll = true
+			break
+		}
+	}
+	corsAllowCredentials = getBoolEnv("CORS_ALLOW_CREDENTIALS", false)
+	cookieSecure = getBoolEnv("COOKIE_SECURE", false)
+	cookieSameSite = parseSameSite(getEnv("COOKIE_SAMESITE", "lax"))
+}
+
+func parseCSVList(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if v := strings.TrimSpace(p); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+func parseSameSite(raw string) http.SameSite {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "strict":
+		return http.SameSiteStrictMode
+	case "none":
+		return http.SameSiteNoneMode
+	default:
+		return http.SameSiteLaxMode
+	}
 }

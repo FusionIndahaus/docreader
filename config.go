@@ -25,17 +25,17 @@ var (
 	amoRedirectURI  string
 	amoBaseURL      string
 	// OpenRouter / Qwen
-	openRouterAPIKey  string
-	openRouterBaseURL string
-	openRouterModel   string
-	siteURL           string
-	siteTitle         string
-	serviceAPIKey     string
-	corsAllowedOrigins []string
-	corsAllowAll       bool
+	openRouterAPIKey     string
+	openRouterBaseURL    string
+	openRouterModel      string
+	siteURL              string
+	siteTitle            string
+	serviceAPIKey        string
+	corsAllowedOrigins   []string
+	corsAllowAll         bool
 	corsAllowCredentials bool
-	cookieSecure      bool
-	cookieSameSite    http.SameSite
+	cookieSecure         bool
+	cookieSameSite       http.SameSite
 )
 
 func initEnvVariables() {

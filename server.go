@@ -6,7 +6,8 @@ import (
 )
 
 func startServer() {
-	if err := http.ListenAndServe(":"+serverPort, nil); err != nil {
+	handler := withCORS(http.DefaultServeMux)
+	if err := http.ListenAndServe(":"+serverPort, handler); err != nil {
 		log.Fatal("ERROR: Не удалось запустить сервер:", err)
 	}
 }

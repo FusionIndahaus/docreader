@@ -13,6 +13,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://appuser:apppass@postgres:5432/appdb?sslmode=disable}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL}
       QWEN_MODEL: ${QWEN_MODEL}
       SITE_URL: ${SITE_URL}
       SITE_TITLE: ${SITE_TITLE}

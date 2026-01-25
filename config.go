@@ -117,7 +117,7 @@ func initEnvVariables() {
 
 	serviceAPIKey = strings.TrimSpace(os.Getenv("DOCREADER_API_KEY"))
 	if serviceAPIKey == "" {
-		log.Printf("WARNING: DOCREADER_API_KEY не задан — service-to-service доступ отключен")
+		log.Printf("WARNING: DOCREADER_API_KEY не задан - service-to-service доступ отключен")
 	}
 
 	corsAllowedOrigins = parseCSVList(os.Getenv("CORS_ALLOWED_ORIGINS"))

@@ -22,13 +22,10 @@ RUN apk --no-cache add \
     tesseract-ocr-data-rus \
     wget
 
-# Создаем непривилегированного пользователя
 RUN addgroup -g 1001 appgroup && adduser -D -u 1001 -G appgroup appuser
 
-# Создаем рабочую директорию
 WORKDIR /app
 
-# Копируем скомпилированное приложение из builder стадии
 COPY --from=builder /app/main .
 
 COPY static/ ./static/

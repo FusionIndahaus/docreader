@@ -83,8 +83,8 @@ func handleUserLogin(d UserDeps) http.HandlerFunc {
 			Value:    token,
 			HttpOnly: true,
 			Path:     "/",
-			Secure:   false,
-			SameSite: http.SameSiteLaxMode,
+			Secure:   cookieSecure,
+			SameSite: cookieSameSite,
 			Expires:  time.Now().Add(7 * 24 * time.Hour),
 		}
 		http.SetCookie(w, cookie)
@@ -120,12 +120,7 @@ func handleUserProfile(d UserDeps) http.HandlerFunc {
 }
 
 func handleUserProfileGet(w http.ResponseWriter, r *http.Request, d UserDeps) {
-	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" {
-		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-	email := d.GetUserEmail(c.Value)
+	email := getRequestUserEmail(r, d.GetUserEmail)
 	if email == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
@@ -153,12 +148,7 @@ func handleUserProfileGet(w http.ResponseWriter, r *http.Request, d UserDeps) {
 }
 
 func handleUserProfileUpdate(w http.ResponseWriter, r *http.Request, d UserDeps) {
-	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" {
-		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-	email := d.GetUserEmail(c.Value)
+	email := getRequestUserEmail(r, d.GetUserEmail)
 	if email == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
@@ -175,7 +165,7 @@ func handleUserProfileUpdate(w http.ResponseWriter, r *http.Request, d UserDeps)
 		d.SendJSONError(w, "invalid JSON", http.StatusBadRequest)
 		return
 	}
-	_, err = d.DB.Exec(`
+	_, err := d.DB.Exec(`
 		UPDATE customers 
 		SET name = $1, company = $2, updated_at = now()
 		WHERE deleted_at IS NULL AND lower(email) = lower($3)
@@ -202,12 +192,7 @@ func handleUserSettings(d UserDeps) http.HandlerFunc {
 }
 
 func handleUserSettingsGet(w http.ResponseWriter, r *http.Request, d UserDeps) {
-	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" {
-		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-	email := d.GetUserEmail(c.Value)
+	email := getRequestUserEmail(r, d.GetUserEmail)
 	if email == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
@@ -270,12 +255,7 @@ func handleUserSettingsGet(w http.ResponseWriter, r *http.Request, d UserDeps) {
 }
 
 func handleUserSettingsUpdate(w http.ResponseWriter, r *http.Request, d UserDeps) {
-	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" {
-		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-	email := d.GetUserEmail(c.Value)
+	email := getRequestUserEmail(r, d.GetUserEmail)
 	if email == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
@@ -355,12 +335,7 @@ func handleUserChangePassword(d UserDeps) http.HandlerFunc {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		c, err := r.Cookie("user_session")
-		if err != nil || c.Value == "" {
-			d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		email := d.GetUserEmail(c.Value)
+		email := getRequestUserEmail(r, d.GetUserEmail)
 		if email == "" {
 			d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 			return
@@ -415,12 +390,7 @@ func handleUserChangePassword(d UserDeps) http.HandlerFunc {
 
 func handleUserSubscription(d UserDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		c, err := r.Cookie("user_session")
-		if err != nil || c.Value == "" {
-			d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		email := d.GetUserEmail(c.Value)
+		email := getRequestUserEmail(r, d.GetUserEmail)
 		if email == "" {
 			d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 			return
@@ -458,12 +428,7 @@ func handleUserSubscription(d UserDeps) http.HandlerFunc {
 
 func handleUserHistory(d UserDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		c, err := r.Cookie("user_session")
-		if err != nil || c.Value == "" {
-			d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		email := strings.ToLower(d.GetUserEmail(c.Value))
+		email := getRequestUserEmail(r, d.GetUserEmail)
 		if email == "" {
 			d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 			return
@@ -475,12 +440,7 @@ func handleUserHistory(d UserDeps) http.HandlerFunc {
 
 func handleUserUsageStats(d UserDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		c, err := r.Cookie("user_session")
-		if err != nil || c.Value == "" {
-			d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		email := d.GetUserEmail(c.Value)
+		email := getRequestUserEmail(r, d.GetUserEmail)
 		if email == "" {
 			d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 			return

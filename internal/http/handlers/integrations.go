@@ -102,12 +102,11 @@ func RegisterIntegrationUserRoutes(mux *http.ServeMux, d IntegrationsDeps) {
 }
 
 func handleUserBitrixSettingsGet(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || d.GetUserEmail(c.Value) == "" {
+	email := getRequestUserEmail(r, d.GetUserEmail)
+	if email == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	email := d.GetUserEmail(c.Value)
 	if d.DB == nil {
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
@@ -145,12 +144,11 @@ func handleUserBitrixSettingsGet(w http.ResponseWriter, r *http.Request, d Integ
 }
 
 func handleUserBitrixSettingsPut(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || d.GetUserEmail(c.Value) == "" {
+	email := getRequestUserEmail(r, d.GetUserEmail)
+	if email == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	email := d.GetUserEmail(c.Value)
 	if d.DB == nil {
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
@@ -211,12 +209,11 @@ func handleUserBitrixSettingsPut(w http.ResponseWriter, r *http.Request, d Integ
 }
 
 func handleUserAmoSettingsGet(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || d.GetUserEmail(c.Value) == "" {
+	email := getRequestUserEmail(r, d.GetUserEmail)
+	if email == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	email := d.GetUserEmail(c.Value)
 	if d.DB == nil {
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
@@ -252,12 +249,11 @@ func handleUserAmoSettingsGet(w http.ResponseWriter, r *http.Request, d Integrat
 }
 
 func handleUserAmoSettingsPut(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || d.GetUserEmail(c.Value) == "" {
+	email := getRequestUserEmail(r, d.GetUserEmail)
+	if email == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	email := d.GetUserEmail(c.Value)
 	if d.DB == nil {
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
@@ -318,12 +314,11 @@ func handleUserAmoSettingsPut(w http.ResponseWriter, r *http.Request, d Integrat
 }
 
 func handleUserBitrixFields(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || d.GetUserEmail(c.Value) == "" {
+	email := getRequestUserEmail(r, d.GetUserEmail)
+	if email == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	email := d.GetUserEmail(c.Value)
 	if d.DB == nil {
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
@@ -363,12 +358,11 @@ func handleUserBitrixFields(w http.ResponseWriter, r *http.Request, d Integratio
 }
 
 func handleUserBitrixMappingGet(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || d.GetUserEmail(c.Value) == "" {
+	email := getRequestUserEmail(r, d.GetUserEmail)
+	if email == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	email := d.GetUserEmail(c.Value)
 	if d.DB == nil {
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
@@ -394,12 +388,11 @@ func handleUserBitrixMappingGet(w http.ResponseWriter, r *http.Request, d Integr
 }
 
 func handleUserBitrixMappingPut(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || d.GetUserEmail(c.Value) == "" {
+	email := getRequestUserEmail(r, d.GetUserEmail)
+	if email == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	email := d.GetUserEmail(c.Value)
 	if d.DB == nil {
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
@@ -452,12 +445,11 @@ func handleUserBitrixMappingPut(w http.ResponseWriter, r *http.Request, d Integr
 }
 
 func handleUserAmoFields(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || d.GetUserEmail(c.Value) == "" {
+	email := getRequestUserEmail(r, d.GetUserEmail)
+	if email == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	email := d.GetUserEmail(c.Value)
 	if d.DB == nil {
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
@@ -504,12 +496,11 @@ func handleUserAmoFields(w http.ResponseWriter, r *http.Request, d IntegrationsD
 }
 
 func handleUserAmoMappingGet(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || d.GetUserEmail(c.Value) == "" {
+	email := getRequestUserEmail(r, d.GetUserEmail)
+	if email == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	email := d.GetUserEmail(c.Value)
 	if d.DB == nil {
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
@@ -535,12 +526,11 @@ func handleUserAmoMappingGet(w http.ResponseWriter, r *http.Request, d Integrati
 }
 
 func handleUserAmoMappingPut(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || d.GetUserEmail(c.Value) == "" {
+	email := getRequestUserEmail(r, d.GetUserEmail)
+	if email == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	email := d.GetUserEmail(c.Value)
 	if d.DB == nil {
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
@@ -586,12 +576,11 @@ func handleUserAmoMappingPut(w http.ResponseWriter, r *http.Request, d Integrati
 // ----- 1C (BYOA) -----
 
 func handleUserOneCSettingsGet(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || d.GetUserEmail(c.Value) == "" {
+	email := getRequestUserEmail(r, d.GetUserEmail)
+	if email == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	email := d.GetUserEmail(c.Value)
 	if d.DB == nil {
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
@@ -630,12 +619,11 @@ func handleUserOneCSettingsGet(w http.ResponseWriter, r *http.Request, d Integra
 }
 
 func handleUserOneCSettingsPut(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || d.GetUserEmail(c.Value) == "" {
+	email := getRequestUserEmail(r, d.GetUserEmail)
+	if email == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	email := d.GetUserEmail(c.Value)
 	if d.DB == nil {
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
@@ -715,12 +703,11 @@ func handleUserOneCSettingsPut(w http.ResponseWriter, r *http.Request, d Integra
 }
 
 func handleUserOneCMappingGet(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || d.GetUserEmail(c.Value) == "" {
+	email := getRequestUserEmail(r, d.GetUserEmail)
+	if email == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	email := d.GetUserEmail(c.Value)
 	if d.DB == nil {
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
@@ -746,12 +733,11 @@ func handleUserOneCMappingGet(w http.ResponseWriter, r *http.Request, d Integrat
 }
 
 func handleUserOneCMappingPut(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	c, err := r.Cookie("user_session")
-	if err != nil || c.Value == "" || d.GetUserEmail(c.Value) == "" {
+	email := getRequestUserEmail(r, d.GetUserEmail)
+	if email == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	email := d.GetUserEmail(c.Value)
 	if d.DB == nil {
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return

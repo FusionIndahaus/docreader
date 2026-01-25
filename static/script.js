@@ -40,6 +40,14 @@ class DocumentAIApp {
         this.animateOnLoad();
         this.connectLiveUpdates();
         this.setupLogout();
+        this.setCurrentYear();
+    }
+
+    setCurrentYear() {
+        const el = document.getElementById('currentYear');
+        if (el) {
+            el.textContent = String(new Date().getFullYear());
+        }
     }
     
     setupEventListeners() {

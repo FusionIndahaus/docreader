@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"document-ai/internal/docxutil"
+	"document-ai/internal/pdfutil"
+	"document-ai/internal/xlsxutil"
 	"io"
 	"log"
 	"net/http"
@@ -65,6 +68,37 @@ func RegisterUploadRoutes(mux *http.ServeMux, d UploadDeps) {
 				contentType = "image/jpeg"
 			case ".png":
 				contentType = "image/png"
+			case ".xlsx":
+				contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+			case ".docx":
+				contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+			}
+		}
+		// Подсчёт страниц/листов по типу документа — лог и ответ API
+		var pagesCount *int
+		var sheetsCount *int
+		ct := strings.ToLower(strings.TrimSpace(contentType))
+		switch {
+		case strings.HasPrefix(ct, "application/pdf"):
+			if n, err := pdfutil.CountPagesFromBytes(fileBytes); err == nil {
+				pagesCount = &n
+				log.Printf("Upload: file=%q Pages Count=%d batchID=%s seq=%d", header.Filename, n, batchID, seq)
+			} else {
+				log.Printf("Upload: file=%q Pages Count=unknown (pdfinfo error: %v)", header.Filename, err)
+			}
+		case strings.Contains(ct, "spreadsheetml") || strings.HasSuffix(strings.ToLower(header.Filename), ".xlsx"):
+			if n, err := xlsxutil.SheetCountFromBytes(fileBytes); err == nil {
+				sheetsCount = &n
+				log.Printf("Upload: file=%q Sheets Count=%d batchID=%s seq=%d", header.Filename, n, batchID, seq)
+			} else {
+				log.Printf("Upload: file=%q Sheets Count=unknown (%v)", header.Filename, err)
+			}
+		case strings.Contains(ct, "wordprocessingml") || strings.HasSuffix(strings.ToLower(header.Filename), ".docx"):
+			if n, err := docxutil.CountPagesFromBytes(fileBytes); err == nil {
+				pagesCount = &n
+				log.Printf("Upload: file=%q Pages Count=%d (docx) batchID=%s seq=%d", header.Filename, n, batchID, seq)
+			} else {
+				log.Printf("Upload: file=%q Pages Count=unknown (%v)", header.Filename, err)
 			}
 		}
 		if err := d.StartLLMProcessing(message, header.Filename, contentType, batchID, seq, fileBytes, userEmail); err != nil {
@@ -72,9 +106,16 @@ func RegisterUploadRoutes(mux *http.ServeMux, d UploadDeps) {
 			d.SendJSONError(w, "Не удалось обработать документ: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		d.SendJSONResponse(w, map[string]interface{}{
+		resp := map[string]interface{}{
 			"status":  "success",
 			"message": "Документ отправлен на обработку! Результаты появятся ниже через несколько минут.",
-		})
+		}
+		if pagesCount != nil {
+			resp["pagesCount"] = *pagesCount
+		}
+		if sheetsCount != nil {
+			resp["sheetsCount"] = *sheetsCount
+		}
+		d.SendJSONResponse(w, resp)
 	}))
 }

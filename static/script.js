@@ -315,6 +315,12 @@ class DocumentAIApp {
                 if (!response.ok) {
                     throw new Error(result?.message || `Ошибка сервера: ${response.status}`);
                 }
+                if (result.pagesCount != null) {
+                    console.log('Upload: Pages Count =', result.pagesCount, 'file:', file.name);
+                }
+                if (result.sheetsCount != null) {
+                    console.log('Upload: Sheets Count =', result.sheetsCount, 'file:', file.name);
+                }
             } catch (error) {
                 // Отмечаем файл как ошибочный при ошибке загрузки
                 this.markFileAsError(file.name);
@@ -545,8 +551,10 @@ class DocumentAIApp {
     }
     
     processSelectedFiles(files) {
-        const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
-        const allowedExtensions = ['.pdf', '.jpg', '.jpeg', '.png'];
+        const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+        const allowedExtensions = ['.pdf', '.jpg', '.jpeg', '.png', '.xlsx', '.docx'];
         const valid = [];
         for (const f of files) {
             const ext = '.' + f.name.split('.').pop().toLowerCase();
@@ -555,7 +563,7 @@ class DocumentAIApp {
             }
         }
         if (valid.length === 0) {
-            this.showError('Неподдерживаемый тип файла. Разрешены только PDF, JPG и PNG');
+            this.showError('Неподдерживаемый тип файла. Разрешены: PDF, JPG, PNG, XLSX, DOCX');
             return;
         }
         this.selectedFiles = valid;
@@ -670,8 +678,10 @@ class DocumentAIApp {
         const icons = {
             'pdf': '[PDF]',
             'jpg': '[IMG]',
-            'jpeg': '[IMG]', 
-            'png': '[IMG]'
+            'jpeg': '[IMG]',
+            'png': '[IMG]',
+            'xlsx': '[XLSX]',
+            'docx': '[DOCX]'
         };
         return icons[ext] || '[FILE]';
     }

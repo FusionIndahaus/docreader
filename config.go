@@ -31,6 +31,7 @@ var (
 	siteURL              string
 	siteTitle            string
 	serviceAPIKey        string
+	billingServiceURL    string
 	corsAllowedOrigins   []string
 	corsAllowAll         bool
 	corsAllowCredentials bool
@@ -118,6 +119,11 @@ func initEnvVariables() {
 	serviceAPIKey = strings.TrimSpace(os.Getenv("DOCREADER_API_KEY"))
 	if serviceAPIKey == "" {
 		log.Printf("WARNING: DOCREADER_API_KEY не задан - service-to-service доступ отключен")
+	}
+
+	billingServiceURL = strings.TrimSpace(os.Getenv("BILLING_SERVICE_URL"))
+	if billingServiceURL == "" {
+		billingServiceURL = "http://localhost:5004"
 	}
 
 	corsAllowedOrigins = parseCSVList(os.Getenv("CORS_ALLOWED_ORIGINS"))

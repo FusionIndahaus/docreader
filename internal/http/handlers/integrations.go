@@ -5,21 +5,22 @@ import (
 	"database/sql"
 	amocrmpkg "document-ai/internal/integrations/amocrm"
 	bitrixpkg "document-ai/internal/integrations/bitrix"
+	"document-ai/internal/http/middleware"
 	onecpkg "document-ai/internal/integrations/onec"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 	"time"
 )
 
 type IntegrationsDeps struct {
-	DB                   *sql.DB
-	RequireUser          func(http.HandlerFunc) http.HandlerFunc
-	SendJSONResponse     func(http.ResponseWriter, interface{})
-	SendJSONError        func(http.ResponseWriter, string, int)
-	GetUserEmail         func(string) string
-	GetCustomerIDByEmail func(string) (string, error)
-	AmoRedirectURI       string
+	DB               *sql.DB
+	RequireUser      func(http.HandlerFunc) http.HandlerFunc
+	SendJSONResponse func(http.ResponseWriter, interface{})
+	SendJSONError    func(http.ResponseWriter, string, int)
+	GetUserEmail     func(string) string
+	AmoRedirectURI   string
 }
 
 func RegisterIntegrationUserRoutes(mux *http.ServeMux, d IntegrationsDeps) {
@@ -102,18 +103,13 @@ func RegisterIntegrationUserRoutes(mux *http.ServeMux, d IntegrationsDeps) {
 }
 
 func handleUserBitrixSettingsGet(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	email := getRequestUserEmail(r, d.GetUserEmail)
-	if email == "" {
+	userID := middleware.UserIDFromContext(r)
+	if userID == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 	if d.DB == nil {
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
-		return
-	}
-	customerID, err := d.GetCustomerIDByEmail(email)
-	if err != nil || customerID == "" {
-		d.SendJSONError(w, "user not found", http.StatusNotFound)
 		return
 	}
 	var enabled bool
@@ -123,7 +119,7 @@ func handleUserBitrixSettingsGet(w http.ResponseWriter, r *http.Request, d Integ
 		SELECT enabled, COALESCE(account_domain,''), COALESCE(config::text,'{}')
 		FROM user_integrations
 		WHERE user_id=$1 AND provider='bitrix'
-	`, customerID)
+	`, userID)
 	_ = row.Scan(&enabled, &accountDomain, &confJSON)
 	entityType := "lead"
 	if confJSON != "" {
@@ -144,41 +140,55 @@ func handleUserBitrixSettingsGet(w http.ResponseWriter, r *http.Request, d Integ
 }
 
 func handleUserBitrixSettingsPut(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	email := getRequestUserEmail(r, d.GetUserEmail)
-	if email == "" {
+	userID := middleware.UserIDFromContext(r)
+	log.Printf("🔍 [Bitrix Settings PUT] userID from context: %q", userID)
+	
+	if userID == "" {
+		log.Printf("❌ [Bitrix Settings PUT] userID is empty, returning unauthorized")
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
+	log.Printf("✅ [Bitrix Settings PUT] userID validated")
+	
 	if d.DB == nil {
+		log.Printf("❌ [Bitrix Settings PUT] DB is nil")
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
 	}
-	customerID, err := d.GetCustomerIDByEmail(email)
-	if err != nil || customerID == "" {
-		d.SendJSONError(w, "user not found", http.StatusNotFound)
-		return
-	}
+	log.Printf("✅ [Bitrix Settings PUT] DB connection validated")
+	
 	var p struct {
 		Enabled     *bool  `json:"enabled"`
 		WebhookBase string `json:"webhook_base"`
 		EntityType  string `json:"entity_type"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		log.Printf("❌ [Bitrix Settings PUT] JSON decode error: %v", err)
 		d.SendJSONError(w, "invalid JSON", http.StatusBadRequest)
 		return
 	}
+	log.Printf("✅ [Bitrix Settings PUT] Parsed request: enabled=%v, webhook_base=%q, entity_type=%q", 
+		p.Enabled, p.WebhookBase, p.EntityType)
+	
 	webhookBase := strings.TrimRight(strings.TrimSpace(p.WebhookBase), "/")
 	if webhookBase == "" {
+		log.Printf("❌ [Bitrix Settings PUT] webhook_base is empty after trimming")
 		d.SendJSONError(w, "webhook_base is required", http.StatusBadRequest)
 		return
 	}
+	log.Printf("✅ [Bitrix Settings PUT] webhook_base validated: %q", webhookBase)
+	
 	enabled := true
 	if p.Enabled != nil {
 		enabled = *p.Enabled
 	}
+	log.Printf("✅ [Bitrix Settings PUT] enabled: %v", enabled)
+	
 	var currentConfStr string
-	row := d.DB.QueryRow(`select coalesce(config::text,'{}') from user_integrations where user_id=$1 and provider='bitrix'`, customerID)
+	row := d.DB.QueryRow(`select coalesce(config::text,'{}') from user_integrations where user_id=$1 and provider='bitrix'`, userID)
 	_ = row.Scan(&currentConfStr)
+	log.Printf("✅ [Bitrix Settings PUT] Current config: %q", currentConfStr)
+	
 	var conf map[string]interface{}
 	if currentConfStr != "" {
 		_ = json.Unmarshal([]byte(currentConfStr), &conf)
@@ -192,7 +202,12 @@ func handleUserBitrixSettingsPut(w http.ResponseWriter, r *http.Request, d Integ
 	}
 	conf["entity_type"] = et
 	confJSON, _ := json.Marshal(conf)
-	_, err = d.DB.Exec(`
+	log.Printf("✅ [Bitrix Settings PUT] Config JSON: %s", string(confJSON))
+	
+	log.Printf("🔄 [Bitrix Settings PUT] Executing INSERT/UPDATE query with userID=%q, enabled=%v, webhookBase=%q, config=%s", 
+		userID, enabled, webhookBase, string(confJSON))
+	
+	_, err := d.DB.Exec(`
 		INSERT INTO user_integrations(id, user_id, provider, enabled, account_domain, credentials, config)
 		VALUES(gen_random_uuid(), $1, 'bitrix', $2, $3, '{}'::jsonb, $4::jsonb)
 		ON CONFLICT (user_id, provider) DO UPDATE SET
@@ -200,27 +215,26 @@ func handleUserBitrixSettingsPut(w http.ResponseWriter, r *http.Request, d Integ
 			account_domain = EXCLUDED.account_domain,
 			config         = EXCLUDED.config,
 			updated_at     = now()
-	`, customerID, enabled, webhookBase, string(confJSON))
+	`, userID, enabled, webhookBase, string(confJSON))
 	if err != nil {
-		d.SendJSONError(w, "save failed", http.StatusInternalServerError)
+		log.Printf("❌ [Bitrix Settings PUT] DB Exec error: %v", err)
+		d.SendJSONError(w, "save failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	log.Printf("✅ [Bitrix Settings PUT] Successfully saved to database")
+	
 	d.SendJSONResponse(w, APIResponse{Status: "success"})
+	log.Printf("✅ [Bitrix Settings PUT] Response sent successfully")
 }
 
 func handleUserAmoSettingsGet(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	email := getRequestUserEmail(r, d.GetUserEmail)
-	if email == "" {
+	userID := middleware.UserIDFromContext(r)
+	if userID == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 	if d.DB == nil {
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
-		return
-	}
-	customerID, err := d.GetCustomerIDByEmail(email)
-	if err != nil || customerID == "" {
-		d.SendJSONError(w, "user not found", http.StatusNotFound)
 		return
 	}
 	var enabled bool
@@ -230,7 +244,7 @@ func handleUserAmoSettingsGet(w http.ResponseWriter, r *http.Request, d Integrat
 		SELECT enabled, COALESCE(account_domain,''), COALESCE(credentials::text,'{}')
 		FROM user_integrations
 		WHERE user_id=$1 AND provider='amocrm'
-	`, customerID)
+	`, userID)
 	_ = row.Scan(&enabled, &accountDomain, &credentialsJSON)
 
 	var creds map[string]interface{}
@@ -249,18 +263,13 @@ func handleUserAmoSettingsGet(w http.ResponseWriter, r *http.Request, d Integrat
 }
 
 func handleUserAmoSettingsPut(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	email := getRequestUserEmail(r, d.GetUserEmail)
-	if email == "" {
+	userID := middleware.UserIDFromContext(r)
+	if userID == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 	if d.DB == nil {
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
-		return
-	}
-	customerID, err := d.GetCustomerIDByEmail(email)
-	if err != nil || customerID == "" {
-		d.SendJSONError(w, "user not found", http.StatusNotFound)
 		return
 	}
 	var p struct {
@@ -297,7 +306,7 @@ func handleUserAmoSettingsPut(w http.ResponseWriter, r *http.Request, d Integrat
 	if p.Enabled != nil {
 		enabled = *p.Enabled
 	}
-	_, err = d.DB.Exec(`
+	_, err := d.DB.Exec(`
 		INSERT INTO user_integrations(id, user_id, provider, enabled, account_domain, credentials, config)
 		VALUES(gen_random_uuid(), $1, 'amocrm', $2, $3, $4::jsonb, '{}'::jsonb)
 		ON CONFLICT (user_id, provider) DO UPDATE SET
@@ -305,7 +314,7 @@ func handleUserAmoSettingsPut(w http.ResponseWriter, r *http.Request, d Integrat
 			account_domain = EXCLUDED.account_domain,
 			credentials    = EXCLUDED.credentials,
 			updated_at     = now()
-	`, customerID, enabled, accountDomain, string(credsJSON))
+	`, userID, enabled, accountDomain, string(credsJSON))
 	if err != nil {
 		d.SendJSONError(w, "save failed", http.StatusInternalServerError)
 		return
@@ -314,8 +323,8 @@ func handleUserAmoSettingsPut(w http.ResponseWriter, r *http.Request, d Integrat
 }
 
 func handleUserBitrixFields(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	email := getRequestUserEmail(r, d.GetUserEmail)
-	if email == "" {
+	userID := middleware.UserIDFromContext(r)
+	if userID == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -323,18 +332,14 @@ func handleUserBitrixFields(w http.ResponseWriter, r *http.Request, d Integratio
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
 	}
-	customerID, err := d.GetCustomerIDByEmail(email)
-	if err != nil || customerID == "" {
-		d.SendJSONError(w, "user not found", http.StatusNotFound)
-		return
-	}
-	cfg, err := bitrixpkg.LoadUserConfig(r.Context(), d.DB, customerID)
+	cfg, err := bitrixpkg.LoadUserConfig(r.Context(), d.DB, userID)
 	if err != nil || strings.TrimSpace(cfg.WebhookBase) == "" {
 		d.SendJSONError(w, "bitrix not configured", http.StatusBadRequest)
 		return
 	}
+	log.Printf("🔍 [Bitrix Fields] userID=%q webhook_base=%q", userID, cfg.WebhookBase)
 	var confJSON string
-	row := d.DB.QueryRow(`select coalesce(config::text,'{}') from user_integrations where user_id=$1 and provider='bitrix'`, customerID)
+	row := d.DB.QueryRow(`select coalesce(config::text,'{}') from user_integrations where user_id=$1 and provider='bitrix'`, userID)
 	_ = row.Scan(&confJSON)
 	entity := "lead"
 	if confJSON != "" {
@@ -344,6 +349,7 @@ func handleUserBitrixFields(w http.ResponseWriter, r *http.Request, d Integratio
 			entity = v
 		}
 	}
+	log.Printf("🔍 [Bitrix Fields] entity_type=%q, fetching fields from Bitrix API...", entity)
 	var fields []bitrixpkg.Field
 	if entity == "deal" {
 		fields, err = bitrixpkg.FetchDealFields(r.Context(), cfg.WebhookBase)
@@ -351,15 +357,17 @@ func handleUserBitrixFields(w http.ResponseWriter, r *http.Request, d Integratio
 		fields, err = bitrixpkg.FetchLeadFields(r.Context(), cfg.WebhookBase)
 	}
 	if err != nil {
-		d.SendJSONError(w, "failed to fetch fields", http.StatusBadGateway)
+		log.Printf("❌ [Bitrix Fields] failed to fetch fields from %q: %v", cfg.WebhookBase, err)
+		d.SendJSONError(w, "failed to fetch fields from Bitrix: "+err.Error(), http.StatusBadGateway)
 		return
 	}
+	log.Printf("✅ [Bitrix Fields] fetched %d fields", len(fields))
 	d.SendJSONResponse(w, APIResponse{Status: "success", Data: fields})
 }
 
 func handleUserBitrixMappingGet(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	email := getRequestUserEmail(r, d.GetUserEmail)
-	if email == "" {
+	userID := middleware.UserIDFromContext(r)
+	if userID == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -367,17 +375,12 @@ func handleUserBitrixMappingGet(w http.ResponseWriter, r *http.Request, d Integr
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
 	}
-	customerID, err := d.GetCustomerIDByEmail(email)
-	if err != nil || customerID == "" {
-		d.SendJSONError(w, "user not found", http.StatusNotFound)
-		return
-	}
 	var configJSON string
 	row := d.DB.QueryRow(`
 		select coalesce(config::text,'{}')
 		from user_integrations
 		where user_id=$1 and provider='bitrix'
-	`, customerID)
+	`, userID)
 	_ = row.Scan(&configJSON)
 	var conf map[string]interface{}
 	_ = json.Unmarshal([]byte(configJSON), &conf)
@@ -388,18 +391,13 @@ func handleUserBitrixMappingGet(w http.ResponseWriter, r *http.Request, d Integr
 }
 
 func handleUserBitrixMappingPut(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	email := getRequestUserEmail(r, d.GetUserEmail)
-	if email == "" {
+	userID := middleware.UserIDFromContext(r)
+	if userID == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 	if d.DB == nil {
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
-		return
-	}
-	customerID, err := d.GetCustomerIDByEmail(email)
-	if err != nil || customerID == "" {
-		d.SendJSONError(w, "user not found", http.StatusNotFound)
 		return
 	}
 	var body map[string]interface{}
@@ -408,7 +406,7 @@ func handleUserBitrixMappingPut(w http.ResponseWriter, r *http.Request, d Integr
 		return
 	}
 	var current string
-	row := d.DB.QueryRow(`select coalesce(config::text,'{}') from user_integrations where user_id=$1 and provider='bitrix'`, customerID)
+	row := d.DB.QueryRow(`select coalesce(config::text,'{}') from user_integrations where user_id=$1 and provider='bitrix'`, userID)
 	_ = row.Scan(&current)
 	var conf map[string]interface{}
 	if current != "" {
@@ -430,13 +428,13 @@ func handleUserBitrixMappingPut(w http.ResponseWriter, r *http.Request, d Integr
 		conf["deal_field_map_by_index"] = m
 	}
 	confJSON, _ := json.Marshal(conf)
-	_, err = d.DB.Exec(`
+	_, err := d.DB.Exec(`
 		insert into user_integrations(id, user_id, provider, enabled, account_domain, credentials, config)
 		values(gen_random_uuid(), $1, 'bitrix', true, '', '{}'::jsonb, $2::jsonb)
 		on conflict (user_id, provider) do update set
 			config = excluded.config,
 			updated_at = now()
-	`, customerID, string(confJSON))
+	`, userID, string(confJSON))
 	if err != nil {
 		d.SendJSONError(w, "save failed", http.StatusInternalServerError)
 		return
@@ -445,8 +443,8 @@ func handleUserBitrixMappingPut(w http.ResponseWriter, r *http.Request, d Integr
 }
 
 func handleUserAmoFields(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	email := getRequestUserEmail(r, d.GetUserEmail)
-	if email == "" {
+	userID := middleware.UserIDFromContext(r)
+	if userID == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -454,14 +452,9 @@ func handleUserAmoFields(w http.ResponseWriter, r *http.Request, d IntegrationsD
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
 	}
-	customerID, err := d.GetCustomerIDByEmail(email)
-	if err != nil || customerID == "" {
-		d.SendJSONError(w, "user not found", http.StatusNotFound)
-		return
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
-	resp, err := amocrmpkg.APIRequestForCustomer(ctx, d.DB, customerID, http.MethodGet, "/api/v4/leads/custom_fields", nil, d.AmoRedirectURI)
+	resp, err := amocrmpkg.APIRequestForCustomer(ctx, d.DB, userID, http.MethodGet, "/api/v4/leads/custom_fields", nil, d.AmoRedirectURI)
 	if err != nil || resp == nil {
 		d.SendJSONError(w, "failed to fetch amo fields", http.StatusBadGateway)
 		return
@@ -496,8 +489,8 @@ func handleUserAmoFields(w http.ResponseWriter, r *http.Request, d IntegrationsD
 }
 
 func handleUserAmoMappingGet(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	email := getRequestUserEmail(r, d.GetUserEmail)
-	if email == "" {
+	userID := middleware.UserIDFromContext(r)
+	if userID == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -505,17 +498,12 @@ func handleUserAmoMappingGet(w http.ResponseWriter, r *http.Request, d Integrati
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
 	}
-	customerID, err := d.GetCustomerIDByEmail(email)
-	if err != nil || customerID == "" {
-		d.SendJSONError(w, "user not found", http.StatusNotFound)
-		return
-	}
 	var configJSON string
 	row := d.DB.QueryRow(`
 		select coalesce(config::text,'{}')
 		from user_integrations
 		where user_id=$1 and provider='amocrm'
-	`, customerID)
+	`, userID)
 	_ = row.Scan(&configJSON)
 	var conf map[string]interface{}
 	_ = json.Unmarshal([]byte(configJSON), &conf)
@@ -526,18 +514,13 @@ func handleUserAmoMappingGet(w http.ResponseWriter, r *http.Request, d Integrati
 }
 
 func handleUserAmoMappingPut(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	email := getRequestUserEmail(r, d.GetUserEmail)
-	if email == "" {
+	userID := middleware.UserIDFromContext(r)
+	if userID == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 	if d.DB == nil {
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
-		return
-	}
-	customerID, err := d.GetCustomerIDByEmail(email)
-	if err != nil || customerID == "" {
-		d.SendJSONError(w, "user not found", http.StatusNotFound)
 		return
 	}
 	var body map[string]interface{}
@@ -546,7 +529,7 @@ func handleUserAmoMappingPut(w http.ResponseWriter, r *http.Request, d Integrati
 		return
 	}
 	var current string
-	row := d.DB.QueryRow(`select coalesce(config::text,'{}') from user_integrations where user_id=$1 and provider='amocrm'`, customerID)
+	row := d.DB.QueryRow(`select coalesce(config::text,'{}') from user_integrations where user_id=$1 and provider='amocrm'`, userID)
 	_ = row.Scan(&current)
 	var conf map[string]interface{}
 	if current != "" {
@@ -559,13 +542,13 @@ func handleUserAmoMappingPut(w http.ResponseWriter, r *http.Request, d Integrati
 		conf["lead_field_map_by_index"] = m
 	}
 	confJSON, _ := json.Marshal(conf)
-	_, err = d.DB.Exec(`
+	_, err := d.DB.Exec(`
 		insert into user_integrations(id, user_id, provider, enabled, account_domain, credentials, config)
 		values(gen_random_uuid(), $1, 'amocrm', true, '', '{}'::jsonb, $2::jsonb)
 		on conflict (user_id, provider) do update set
 			config = excluded.config,
 			updated_at = now()
-	`, customerID, string(confJSON))
+	`, userID, string(confJSON))
 	if err != nil {
 		d.SendJSONError(w, "save failed", http.StatusInternalServerError)
 		return
@@ -576,8 +559,8 @@ func handleUserAmoMappingPut(w http.ResponseWriter, r *http.Request, d Integrati
 // ----- 1C (BYOA) -----
 
 func handleUserOneCSettingsGet(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	email := getRequestUserEmail(r, d.GetUserEmail)
-	if email == "" {
+	userID := middleware.UserIDFromContext(r)
+	if userID == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -585,15 +568,10 @@ func handleUserOneCSettingsGet(w http.ResponseWriter, r *http.Request, d Integra
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
 	}
-	customerID, err := d.GetCustomerIDByEmail(email)
-	if err != nil || customerID == "" {
-		d.SendJSONError(w, "user not found", http.StatusNotFound)
-		return
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
-	cfg, _ := onecpkg.LoadUserConfig(ctx, d.DB, customerID)
-	cred, _ := onecpkg.LoadCredentials(ctx, d.DB, customerID)
+	cfg, _ := onecpkg.LoadUserConfig(ctx, d.DB, userID)
+	cred, _ := onecpkg.LoadCredentials(ctx, d.DB, userID)
 	// маскируем секреты
 	respCred := map[string]interface{}{
 		"auth_type": cred.AuthType,
@@ -619,18 +597,13 @@ func handleUserOneCSettingsGet(w http.ResponseWriter, r *http.Request, d Integra
 }
 
 func handleUserOneCSettingsPut(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	email := getRequestUserEmail(r, d.GetUserEmail)
-	if email == "" {
+	userID := middleware.UserIDFromContext(r)
+	if userID == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 	if d.DB == nil {
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
-		return
-	}
-	customerID, err := d.GetCustomerIDByEmail(email)
-	if err != nil || customerID == "" {
-		d.SendJSONError(w, "user not found", http.StatusNotFound)
 		return
 	}
 	var p struct {
@@ -657,7 +630,7 @@ func handleUserOneCSettingsPut(w http.ResponseWriter, r *http.Request, d Integra
 	}
 	// merge config
 	var currentConfStr string
-	row := d.DB.QueryRow(`select coalesce(config::text,'{}') from user_integrations where user_id=$1 and provider='1c'`, customerID)
+	row := d.DB.QueryRow(`select coalesce(config::text,'{}') from user_integrations where user_id=$1 and provider='1c'`, userID)
 	_ = row.Scan(&currentConfStr)
 	var conf map[string]interface{}
 	if currentConfStr != "" {
@@ -685,7 +658,7 @@ func handleUserOneCSettingsPut(w http.ResponseWriter, r *http.Request, d Integra
 		creds["token"] = p.Token
 	}
 	credsJSON, _ := json.Marshal(creds)
-	_, err = d.DB.Exec(`
+	_, err := d.DB.Exec(`
 		INSERT INTO user_integrations(id, user_id, provider, enabled, account_domain, credentials, config)
 		VALUES(gen_random_uuid(), $1, '1c', $2, $3, $4::jsonb, $5::jsonb)
 		ON CONFLICT (user_id, provider) DO UPDATE SET
@@ -694,7 +667,7 @@ func handleUserOneCSettingsPut(w http.ResponseWriter, r *http.Request, d Integra
 			credentials    = EXCLUDED.credentials,
 			config         = EXCLUDED.config,
 			updated_at     = now()
-	`, customerID, enabled, baseURL, string(credsJSON), string(confJSON))
+	`, userID, enabled, baseURL, string(credsJSON), string(confJSON))
 	if err != nil {
 		d.SendJSONError(w, "save failed", http.StatusInternalServerError)
 		return
@@ -703,8 +676,8 @@ func handleUserOneCSettingsPut(w http.ResponseWriter, r *http.Request, d Integra
 }
 
 func handleUserOneCMappingGet(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	email := getRequestUserEmail(r, d.GetUserEmail)
-	if email == "" {
+	userID := middleware.UserIDFromContext(r)
+	if userID == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -712,17 +685,12 @@ func handleUserOneCMappingGet(w http.ResponseWriter, r *http.Request, d Integrat
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
 	}
-	customerID, err := d.GetCustomerIDByEmail(email)
-	if err != nil || customerID == "" {
-		d.SendJSONError(w, "user not found", http.StatusNotFound)
-		return
-	}
 	var configJSON string
 	row := d.DB.QueryRow(`
 		select coalesce(config::text,'{}')
 		from user_integrations
 		where user_id=$1 and provider='1c'
-	`, customerID)
+	`, userID)
 	_ = row.Scan(&configJSON)
 	var conf map[string]interface{}
 	_ = json.Unmarshal([]byte(configJSON), &conf)
@@ -733,18 +701,13 @@ func handleUserOneCMappingGet(w http.ResponseWriter, r *http.Request, d Integrat
 }
 
 func handleUserOneCMappingPut(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
-	email := getRequestUserEmail(r, d.GetUserEmail)
-	if email == "" {
+	userID := middleware.UserIDFromContext(r)
+	if userID == "" {
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 	if d.DB == nil {
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
-		return
-	}
-	customerID, err := d.GetCustomerIDByEmail(email)
-	if err != nil || customerID == "" {
-		d.SendJSONError(w, "user not found", http.StatusNotFound)
 		return
 	}
 	var body map[string]interface{}
@@ -753,7 +716,7 @@ func handleUserOneCMappingPut(w http.ResponseWriter, r *http.Request, d Integrat
 		return
 	}
 	var current string
-	row := d.DB.QueryRow(`select coalesce(config::text,'{}') from user_integrations where user_id=$1 and provider='1c'`, customerID)
+	row := d.DB.QueryRow(`select coalesce(config::text,'{}') from user_integrations where user_id=$1 and provider='1c'`, userID)
 	_ = row.Scan(&current)
 	var conf map[string]interface{}
 	if current != "" {
@@ -769,13 +732,13 @@ func handleUserOneCMappingPut(w http.ResponseWriter, r *http.Request, d Integrat
 		conf["endpoint_path"] = strings.TrimSpace(ep)
 	}
 	confJSON, _ := json.Marshal(conf)
-	_, err = d.DB.Exec(`
+	_, err := d.DB.Exec(`
 		insert into user_integrations(id, user_id, provider, enabled, account_domain, credentials, config)
 		values(gen_random_uuid(), $1, '1c', true, '', '{}'::jsonb, $2::jsonb)
 		on conflict (user_id, provider) do update set
 			config = excluded.config,
 			updated_at = now()
-	`, customerID, string(confJSON))
+	`, userID, string(confJSON))
 	if err != nil {
 		d.SendJSONError(w, "save failed", http.StatusInternalServerError)
 		return

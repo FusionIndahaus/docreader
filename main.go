@@ -16,7 +16,6 @@ import (
 	dbpkg "document-ai/internal/infra/db"
 	eventbus "document-ai/internal/infra/events"
 	sess "document-ai/internal/infra/session"
-	customerrepo "document-ai/internal/repository/customer"
 	"document-ai/internal/usecase"
 	"net/http"
 	"strings"
@@ -57,14 +56,13 @@ func main() {
 		SafeCompareStrings:   func(a, b string) bool { return safeCompareStrings(a, b) },
 		AdminEmail:           adminEmail,
 		AdminPassword:        adminPassword,
-		DB:                   db,
-		MaxFileSize:          maxFileSize,
-		StartLLMProcessing: func(message, fileName, contentType, batchID string, seq int, fileBytes []byte, userEmail string) error {
-			return appUsecase.ProcessDocumentAsync(message, fileName, contentType, batchID, seq, fileBytes, userEmail)
+		DB:          db,
+		MaxFileSize: maxFileSize,
+		StartLLMProcessing: func(message, fileName, contentType, batchID string, seq int, fileBytes []byte, userEmail, userID string, pagesCount int) error {
+			return appUsecase.ProcessDocumentAsync(message, fileName, contentType, batchID, seq, fileBytes, userEmail, userID, pagesCount)
 		},
 		EventsSubscribe:       bus.Subscribe,
 		EventsInitialSnapshot: bus.InitialSnapshot,
-		GetCustomerIDByEmail:  func(email string) (string, error) { return customerrepo.GetIDByEmail(db, email) },
 		AmoRedirectURI:        amoRedirectURI,
 		GetUserHistory: func(email string) interface{} {
 			responsesMutex.RLock()
@@ -89,9 +87,11 @@ func main() {
 	approuter.SetupRoutes(appro)
 	// Подключаем publisher к usecase: публикуем через event bus
 	appUsecase = usecase.Service{
-		Publisher:  bus,
-		Dispatcher: integrations.Dispatcher{DB: db, AmoRedirectURI: amoRedirectURI},
-		GenerateID: func() string { return generateSimpleID() },
+		Publisher:         bus,
+		Dispatcher:        integrations.Dispatcher{DB: db, AmoRedirectURI: amoRedirectURI},
+		GenerateID:        func() string { return generateSimpleID() },
+		DB:                db,
+		BillingServiceURL: billingServiceURL,
 		LLM: llmopenrouter.Client{
 			APIKey:    openRouterAPIKey,
 			BaseURL:   openRouterBaseURL,

@@ -27,7 +27,6 @@ type UserDeps struct {
 	GenerateSessionToken func() (string, error)
 	HashPassword         func(string) (string, error)
 	CheckPasswordHash    func(string, string) bool
-	GetCustomerIDByEmail func(string) (string, error)
 	GetUserHistory       func(email string) interface{} // returns history slice for user
 }
 
@@ -244,8 +243,8 @@ func handleUserSettingsGet(w http.ResponseWriter, r *http.Request, d UserDeps) {
 	}
 	var amoConnected bool
 	if amocrmpkg.IsConfigured() {
-		if customerID, err := d.GetCustomerIDByEmail(email); err == nil && customerID != "" {
-			if tok, err := amocrmpkg.LoadCustomerTokens(r.Context(), d.DB, customerID); err == nil && tok.AccessToken != "" {
+		if userID := r.Header.Get("X-Docreader-User-Id"); userID != "" {
+			if tok, err := amocrmpkg.LoadCustomerTokens(r.Context(), d.DB, userID); err == nil && tok.AccessToken != "" {
 				amoConnected = true
 			}
 		}

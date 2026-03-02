@@ -15,7 +15,6 @@ type Deps struct {
 	SendJSONResponse     func(http.ResponseWriter, interface{})
 	SendJSONError        func(http.ResponseWriter, string, int)
 	GetUserEmail         func(string) string
-	GetCustomerIDByEmail func(string) (string, error)
 	GenerateSessionToken func() (string, error)
 	SafeCompareStrings   func(string, string) bool
 	AmoRedirectURI       string
@@ -43,14 +42,14 @@ func handleUserAmoStatus(w http.ResponseWriter, r *http.Request, d Deps) {
 		d.SendJSONResponse(w, map[string]interface{}{"status": "success", "data": map[string]interface{}{"configured": false, "connected": false}})
 		return
 	}
-	customerID, err := d.GetCustomerIDByEmail(email)
-	if err != nil {
-		d.SendJSONResponse(w, map[string]interface{}{"status": "success", "data": map[string]interface{}{"configured": true, "connected": false, "error": "no_customer"}})
+	userID := r.Header.Get("X-Docreader-User-Id")
+	if userID == "" {
+		d.SendJSONResponse(w, map[string]interface{}{"status": "success", "data": map[string]interface{}{"configured": true, "connected": false, "error": "no_user"}})
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	tok, err := amocrmpkg.LoadCustomerTokens(ctx, d.DB, customerID)
+	tok, err := amocrmpkg.LoadCustomerTokens(ctx, d.DB, userID)
 	if err != nil || tok.AccessToken == "" {
 		d.SendJSONResponse(w, map[string]interface{}{"status": "success", "data": map[string]interface{}{"configured": true, "connected": false}})
 		return
@@ -86,12 +85,12 @@ func handleUserAmoConnect(w http.ResponseWriter, r *http.Request, d Deps) {
 		SameSite: cookieSameSite,
 		Expires:  time.Now().Add(10 * time.Minute),
 	})
-	customerID, err := d.GetCustomerIDByEmail(email)
-	if err != nil || customerID == "" {
+	userID := r.Header.Get("X-Docreader-User-Id")
+	if userID == "" {
 		d.SendJSONError(w, "user not found", http.StatusBadRequest)
 		return
 	}
-	url, err := amocrmpkg.GetAuthorizeURLForCustomer(r.Context(), d.DB, customerID, state, d.AmoRedirectURI)
+	url, err := amocrmpkg.GetAuthorizeURLForCustomer(r.Context(), d.DB, userID, state, d.AmoRedirectURI)
 	if err != nil {
 		d.SendJSONError(w, "prepare auth url error: "+err.Error(), http.StatusBadRequest)
 		return
@@ -121,14 +120,14 @@ func handleUserAmoOAuthCallback(w http.ResponseWriter, r *http.Request, d Deps) 
 	sc.MaxAge = -1
 	http.SetCookie(w, sc)
 
-	customerID, err := d.GetCustomerIDByEmail(email)
-	if err != nil || customerID == "" {
+	userID := r.Header.Get("X-Docreader-User-Id")
+	if userID == "" {
 		d.SendJSONError(w, "customer not found", http.StatusBadRequest)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
-	if err := amocrmpkg.ExchangeAuthCodeForCustomer(ctx, d.DB, customerID, code, d.AmoRedirectURI); err != nil {
+	if err := amocrmpkg.ExchangeAuthCodeForCustomer(ctx, d.DB, userID, code, d.AmoRedirectURI); err != nil {
 		d.SendJSONError(w, "oauth exchange error: "+err.Error(), http.StatusBadRequest)
 		return
 	}

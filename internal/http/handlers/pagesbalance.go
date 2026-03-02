@@ -20,9 +20,9 @@ type PagesBalanceDeps struct {
 
 // RegisterPagesBalanceRoutes registers internal and user-facing endpoints for pages balance.
 //
-//   POST /internal/pages-balance/init   — create trial record (tarif_id=1, amount=10)
-//   POST /internal/pages-balance/update — upsert record when subscription changes
-//   GET  /user/pages-balance            — get current balance for authenticated user
+//	POST /internal/pages-balance/init   — create trial record (tarif_id=1, amount=10)
+//	POST /internal/pages-balance/update — upsert record when subscription changes
+//	GET  /user/pages-balance            — get current balance for authenticated user
 func RegisterPagesBalanceRoutes(mux *http.ServeMux, d PagesBalanceDeps) {
 	// Internal: init balance for new user (called by billing service)
 	mux.HandleFunc("/internal/pages-balance/init", func(w http.ResponseWriter, r *http.Request) {

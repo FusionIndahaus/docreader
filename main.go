@@ -56,8 +56,8 @@ func main() {
 		SafeCompareStrings:   func(a, b string) bool { return safeCompareStrings(a, b) },
 		AdminEmail:           adminEmail,
 		AdminPassword:        adminPassword,
-		DB:          db,
-		MaxFileSize: maxFileSize,
+		DB:                   db,
+		MaxFileSize:          maxFileSize,
 		StartLLMProcessing: func(message, fileName, contentType, batchID string, seq int, fileBytes []byte, userEmail, userID string, pagesCount int) error {
 			return appUsecase.ProcessDocumentAsync(message, fileName, contentType, batchID, seq, fileBytes, userEmail, userID, pagesCount)
 		},

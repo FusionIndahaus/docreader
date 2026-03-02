@@ -12,10 +12,10 @@ import (
 // AmountByTarif maps tarif_id → pages limit for the autoaccounter product.
 // Must stay in sync with pagesBalance.service.ts in the billing service.
 var AmountByTarif = map[int]int{
-	1: 10,    // Trial
-	2: 1500,  // Start
-	3: 1800,  // Business
-	4: 2500,  // Ultimate
+	1: 10,   // Trial
+	2: 1500, // Start
+	3: 1800, // Business
+	4: 2500, // Ultimate
 }
 
 // InitUserBalance inserts a trial balance record (tarif_id=1, amount=10) for a new user.

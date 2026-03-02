@@ -127,8 +127,8 @@ func (a Auth) authorizeJWT(r *http.Request) (string, string, bool) {
 		return "", "", false
 	}
 	if subtle.ConstantTimeCompare([]byte(apiKey), []byte(a.ServiceAPIKey)) != 1 {
-		log.Printf("❌ [JWT Auth] API key mismatch. Got: %s..., Expected: %s...\n", 
-			apiKey[:min(8, len(apiKey))], 
+		log.Printf("❌ [JWT Auth] API key mismatch. Got: %s..., Expected: %s...\n",
+			apiKey[:min(8, len(apiKey))],
 			a.ServiceAPIKey[:min(8, len(a.ServiceAPIKey))])
 		return "", "", false
 	}
@@ -181,12 +181,12 @@ func (a Auth) authorizeJWT(r *http.Request) (string, string, bool) {
 	// Извлекаем claims
 	if claims, ok := token.Claims.(jwt.MapClaims); ok {
 		log.Printf("📋 [JWT Auth] Claims: %+v\n", claims)
-		
+
 		userID, _ := claims["userId"].(string)
 		email, _ := claims["email"].(string)
-		
+
 		log.Printf("🔍 [JWT Auth] Extracted - userID: %q, email: %q\n", userID, email)
-		
+
 		if userID != "" && email != "" {
 			log.Printf("✅ [JWT Auth] Successfully authenticated user: %s (%s)\n", email, userID)
 			return userID, email, true

@@ -92,7 +92,7 @@ Never invent or add information beyond what the user asked for.`
 			{Role: "user", Content: userParts},
 		},
 		Temperature: 0.0,  // Детерминированный вывод для точности
-		MaxTokens:   2000,  // Ограничение длины ответа
+		MaxTokens:   2000, // Ограничение длины ответа
 		TopP:        0.1,  // Минимальная вариативность
 	}
 

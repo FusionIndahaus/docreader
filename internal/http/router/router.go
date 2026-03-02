@@ -41,10 +41,10 @@ type Deps struct {
 	EventsInitialSnapshot func(email string) [][]byte
 
 	// user deps
-	AmoRedirectURI       string
-	GetUserHistory       func(email string) interface{}
-	SetUserSession       func(token, email string)
-	DeleteUserSession    func(token string)
+	AmoRedirectURI    string
+	GetUserHistory    func(email string) interface{}
+	SetUserSession    func(token, email string)
+	DeleteUserSession func(token string)
 }
 
 func SetupRoutes(d Deps) {

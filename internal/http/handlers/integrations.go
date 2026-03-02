@@ -3,9 +3,9 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"document-ai/internal/http/middleware"
 	amocrmpkg "document-ai/internal/integrations/amocrm"
 	bitrixpkg "document-ai/internal/integrations/bitrix"
-	"document-ai/internal/http/middleware"
 	onecpkg "document-ai/internal/integrations/onec"
 	"encoding/json"
 	"log"
@@ -142,21 +142,21 @@ func handleUserBitrixSettingsGet(w http.ResponseWriter, r *http.Request, d Integ
 func handleUserBitrixSettingsPut(w http.ResponseWriter, r *http.Request, d IntegrationsDeps) {
 	userID := middleware.UserIDFromContext(r)
 	log.Printf("🔍 [Bitrix Settings PUT] userID from context: %q", userID)
-	
+
 	if userID == "" {
 		log.Printf("❌ [Bitrix Settings PUT] userID is empty, returning unauthorized")
 		d.SendJSONError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 	log.Printf("✅ [Bitrix Settings PUT] userID validated")
-	
+
 	if d.DB == nil {
 		log.Printf("❌ [Bitrix Settings PUT] DB is nil")
 		d.SendJSONError(w, "DB not connected", http.StatusServiceUnavailable)
 		return
 	}
 	log.Printf("✅ [Bitrix Settings PUT] DB connection validated")
-	
+
 	var p struct {
 		Enabled     *bool  `json:"enabled"`
 		WebhookBase string `json:"webhook_base"`
@@ -167,9 +167,9 @@ func handleUserBitrixSettingsPut(w http.ResponseWriter, r *http.Request, d Integ
 		d.SendJSONError(w, "invalid JSON", http.StatusBadRequest)
 		return
 	}
-	log.Printf("✅ [Bitrix Settings PUT] Parsed request: enabled=%v, webhook_base=%q, entity_type=%q", 
+	log.Printf("✅ [Bitrix Settings PUT] Parsed request: enabled=%v, webhook_base=%q, entity_type=%q",
 		p.Enabled, p.WebhookBase, p.EntityType)
-	
+
 	webhookBase := strings.TrimRight(strings.TrimSpace(p.WebhookBase), "/")
 	if webhookBase == "" {
 		log.Printf("❌ [Bitrix Settings PUT] webhook_base is empty after trimming")
@@ -177,18 +177,18 @@ func handleUserBitrixSettingsPut(w http.ResponseWriter, r *http.Request, d Integ
 		return
 	}
 	log.Printf("✅ [Bitrix Settings PUT] webhook_base validated: %q", webhookBase)
-	
+
 	enabled := true
 	if p.Enabled != nil {
 		enabled = *p.Enabled
 	}
 	log.Printf("✅ [Bitrix Settings PUT] enabled: %v", enabled)
-	
+
 	var currentConfStr string
 	row := d.DB.QueryRow(`select coalesce(config::text,'{}') from user_integrations where user_id=$1 and provider='bitrix'`, userID)
 	_ = row.Scan(&currentConfStr)
 	log.Printf("✅ [Bitrix Settings PUT] Current config: %q", currentConfStr)
-	
+
 	var conf map[string]interface{}
 	if currentConfStr != "" {
 		_ = json.Unmarshal([]byte(currentConfStr), &conf)
@@ -203,10 +203,10 @@ func handleUserBitrixSettingsPut(w http.ResponseWriter, r *http.Request, d Integ
 	conf["entity_type"] = et
 	confJSON, _ := json.Marshal(conf)
 	log.Printf("✅ [Bitrix Settings PUT] Config JSON: %s", string(confJSON))
-	
-	log.Printf("🔄 [Bitrix Settings PUT] Executing INSERT/UPDATE query with userID=%q, enabled=%v, webhookBase=%q, config=%s", 
+
+	log.Printf("🔄 [Bitrix Settings PUT] Executing INSERT/UPDATE query with userID=%q, enabled=%v, webhookBase=%q, config=%s",
 		userID, enabled, webhookBase, string(confJSON))
-	
+
 	_, err := d.DB.Exec(`
 		INSERT INTO user_integrations(id, user_id, provider, enabled, account_domain, credentials, config)
 		VALUES(gen_random_uuid(), $1, 'bitrix', $2, $3, '{}'::jsonb, $4::jsonb)
@@ -222,7 +222,7 @@ func handleUserBitrixSettingsPut(w http.ResponseWriter, r *http.Request, d Integ
 		return
 	}
 	log.Printf("✅ [Bitrix Settings PUT] Successfully saved to database")
-	
+
 	d.SendJSONResponse(w, APIResponse{Status: "success"})
 	log.Printf("✅ [Bitrix Settings PUT] Response sent successfully")
 }

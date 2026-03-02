@@ -38,8 +38,11 @@ func (c Client) Process(ctx context.Context, message string, fileName string, co
 		Content []contentPart `json:"content"`
 	}
 	type chatRequest struct {
-		Model    string        `json:"model"`
-		Messages []chatMessage `json:"messages"`
+		Model       string        `json:"model"`
+		Messages    []chatMessage `json:"messages"`
+		Temperature float64       `json:"temperature"`
+		MaxTokens   int           `json:"max_tokens,omitempty"`
+		TopP        float64       `json:"top_p,omitempty"`
 	}
 	type choiceMessage struct {
 		Role    string `json:"role"`
@@ -76,10 +79,10 @@ Never invent or add information beyond what the user asked for.`
 		dataURI := "data:" + ct + ";base64," + b64
 		userParts = append(userParts, contentPart{Type: "image_url", ImageURL: &imageURL{Url: dataURI}})
 	} else if strings.Contains(ct, "pdf") {
-		if pngB64, err := rasterizePDFFirstPageToPNGBase64(fileBytes); err == nil && strings.TrimSpace(pngB64) != "" {
-			dataURI := "data:image/png;base64," + pngB64
-			userParts = append(userParts, contentPart{Type: "image_url", ImageURL: &imageURL{Url: dataURI}})
-		}
+		// Передаём PDF напрямую без конвертации
+		b64 := base64.StdEncoding.EncodeToString(fileBytes)
+		dataURI := "data:application/pdf;base64," + b64
+		userParts = append(userParts, contentPart{Type: "image_url", ImageURL: &imageURL{Url: dataURI}})
 	}
 
 	reqBody := chatRequest{
@@ -88,6 +91,9 @@ Never invent or add information beyond what the user asked for.`
 			{Role: "system", Content: []contentPart{{Type: "text", Text: systemContent}}},
 			{Role: "user", Content: userParts},
 		},
+		Temperature: 0.0,  // Детерминированный вывод для точности
+		MaxTokens:   2000, // Ограничение длины ответа
+		TopP:        0.1,  // Минимальная вариативность
 	}
 
 	buf, _ := json.Marshal(reqBody)
@@ -140,7 +146,8 @@ func rasterizePDFFirstPageToPNGBase64(pdfBytes []byte) (string, error) {
 	}
 	defer os.Remove(pdfPath)
 	outPrefix := strings.TrimSuffix(pdfPath, ".pdf")
-	cmd := exec.Command("pdftoppm", "-png", "-f", "1", "-l", "1", "-singlefile", pdfPath, outPrefix)
+	// Конвертируем PDF в PNG с высоким разрешением (300 DPI для качественного OCR)
+	cmd := exec.Command("pdftoppm", "-png", "-r", "300", "-f", "1", "-l", "1", "-singlefile", pdfPath, outPrefix)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		_ = out
 		return "", fmt.Errorf("pdftoppm error: %w", err)

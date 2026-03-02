@@ -1,0 +1,151 @@
+Пример для плагина REST Client на Visual Studio Code
+### Использование REST-сервиса OData для оперативного получения данных приложений
+# Включает операции:
+#  1. Реквизиты компании
+#  1.1. Реквизиты организации
+#  1.2. Реквизиты расчетного счета
+#  1.3. Учетная политика организации
+#  1.3.1 Полная учетная политика организации
+#  1.3.2 Организация - плательщик НДС
+#
+#  2. Контрагенты
+#  2.1 Список первых контрагентов
+#  2.2 Поиск контрагентов по наименованию
+#  2.3 Поиск контрагентов по ИНН
+#
+#  3. Номенклатура
+#  3.1 Список номенклатуры
+#  3.2 Поиск по наименованию
+#
+#  4. Цена номенклатуры
+#  4.1 Получение цены номенклатуры из регистра ЦеныНоменклатурыДокументов
+#  4.1.1 Получение всех цен номенклатуры
+#  4.1.2 Получение цены номенклатуры
+#
+# Используемые переменные
+# server - адрес сервера сервиса.
+# app - название приложения (ea - Бухгалтерия предприятия)
+# tenant - область данных для проверки
+# authorization - авторизация на сервере
+# format - формат вывода информации
+ 
+ 
+@server = https://demo.1cfresh.com
+@app = ea
+@tenant = 34
+@authorization = Basic crm 123Qwer
+@format = $format=json;odata=nometadata
+ 
+## 1. Реквизиты компании
+## Реквизиты компании состоят из реквизитов организации и реквизитов банковского счета.
+## Реквизиты банковского счета следует получать от основного банковского счета
+ 
+### 1.1 Реквизиты организации
+### Используемые переменные
+## company_keys - Список реквизитов, которые следует запросить
+@company_keys = Ref_Key, Description, ИНН, КПП, НаименованиеПолное, ОГРН, Префикс, ЮридическоеФизическоеЛицо, ОсновнойБанковскийСчет, ОсновнойБанковскийСчет/НомерСчета
+ 
+GET {{server}}/a/{{app}}/{{tenant}}//odata/standard.odata/Catalog_Организации?{{format}}&$expand=ОсновнойБанковскийСчет&$select={{company_keys}}
+Authorization: {{authorization}}
+ 
+### 1.2 Реквизиты расчетного счета
+### Используемые переменные
+## accaunt_owner_type - тип владельца банковского счета
+## accaunt_keys - список реквизитов, которые следует запросить
+@accaunt_owner_type = StandardODATA.Catalog_Организации
+@accaunt_keys = Owner, НомерСчета, ДатаОткрытия, Банк/Ref_Key, Банк/Code, Банк/Description, Банк/КоррСчет
+ 
+GET {{server}}/a/{{app}}/{{tenant}}//odata/standard.odata/Catalog_БанковскиеСчета?{{format}}&$expand=Банк&$select={{accaunt_keys}}&$filter=(Owner_Type eq '{{accaunt_owner_type}}')
+Authorization: {{authorization}}
+ 
+### 1.3 Учетная политика организации
+### Используемые переменные
+## company_key_ref - guid организации, по которой запрашиваются данные
+@company_key_ref = fb8266b3-0bd6-11e8-b076-005056897fe1
+ 
+ 
+### 1.3.1 Полная учетная политика конкретной организации
+GET {{server}}/a/{{app}}/{{tenant}}//odata/standard.odata/InformationRegister_НастройкиСистемыНалогообложения/SliceLast(,Condition=Организация_Key eq guid'{{company_key_ref}}')?{{format}}
+Authorization: {{authorization}}
+ 
+### 1.3.2 Организация - плательщик НДС
+GET {{server}}/a/{{app}}/{{tenant}}//odata/standard.odata/InformationRegister_НастройкиСистемыНалогообложения/SliceLast(,Condition=Организация_Key eq guid'{{company_key_ref}}')?{{format}}&$select=ПлательщикНДС
+Authorization: {{authorization}}
+ 
+## 2. Контрагенты
+## Используемые переменные
+# partners_keys - список реквизитов, которые следует запросить
+@partners_keys = Ref_Key, Description, ИНН, КПП, РегистрационныйНомер
+ 
+### 2.1. Список первых контрагентов
+### Используемые переменные
+## partners_skip - начиная с какого элемента следует выбирать контрагентов
+## partners_top - количество контрагентов в выборке
+@partners_skip = 0
+@partners_top = 5
+ 
+GET {{server}}/a/{{app}}/{{tenant}}/odata/standard.odata/Catalog_Контрагенты?{{format}}&$orderby=Description&$select={{partners_keys}}&$top={{partners_top}}&$skip={{partners_skip}}&$filter=not (IsFolder)
+Authorization: {{authorization}}
+ 
+### 2.2 Поиск контрагентов по наименованию
+### Используемые переменные
+## partners_desc_filter - значение поиска по наименованию. Символ "%" означает любую последовательность символов
+@partners_desc_filter='ИФНС%'
+ 
+GET {{server}}/a/{{app}}/{{tenant}}/odata/standard.odata/Catalog_Контрагенты?{{format}}&$select={{partners_keys}}&$filter=like(Description, {{partners_desc_filter}})
+Authorization: {{authorization}}
+ 
+### 2.3 Поиск контрагентов по ИНН
+### Используемые переменные
+## partners_inn_filter - значение поиска по ИНН.
+@partners_inn_filter = 7799543097
+ 
+GET {{server}}/a/{{app}}/{{tenant}}//odata/standard.odata/Catalog_Контрагенты?{{format}}&$select={{partners_keys}}&$filter=(ИНН eq '{{partners_inn_filter}}')
+Authorization: {{authorization}}
+ 
+##  3. Номенклатура
+## Используемые переменные
+# items_keys - список реквизитов, которые следует запросить
+@items_keys = Ref_Key, Description, НаименованиеПолное, ЕдиницаИзмерения/Code, ЕдиницаИзмерения/Description
+ 
+###  3.1 Список номенклатуры
+### Используемые переменные
+## items_skip - начиная с какого элемента следует выбирать номенклатуру
+## items_top - количество номенклатуры в выборке
+@items_skip = 0
+@items_top = 5
+ 
+GET {{server}}/a/{{app}}/{{tenant}}//odata/standard.odata/Catalog_Номенклатура?{{format}}&$expand=ЕдиницаИзмерения&$select={{items_keys}}&$top={{items_top}}&$skip={{items_skip}}&$filter=not (IsFolder)&$orderby=Description
+Authorization: {{authorization}}
+ 
+###  3.2 Поиск по наименованию
+### Используемые переменные
+## items_desc_filter - значение поиска по наименованию. Символ "%" означает любую последовательность символов
+@items_desc_filter = еще од%
+ 
+GET {{server}}/a/{{app}}/{{tenant}}//odata/standard.odata/Catalog_Номенклатура?{{format}}&$expand=ЕдиницаИзмерения&$select={{items_keys}}&$filter=like(Description, '{{items_desc_filter}}')
+Authorization: {{authorization}}
+ 
+##  4. Цена номенклатуры
+##
+ 
+###  4.1 Получение цены номенклатуры из регистра сведений ЦеныНоменклатурыДокументов
+###  В информационной базе могут использоваться цены номенклатуры автоматически записываемые в документах.
+###  Для выставления счетов следует использовать продажные цены.
+###
+###  Используемые переменные:
+## type_price - тип цены. Это фиксированное перечисление со значениями "ПоЗакупочнымЦенам" и "ПоПродажнымЦенам"
+@type_price = ПоПродажнымЦенам
+ 
+#### 4.1.1 Получение всех цен номенклатуры
+GET {{server}}/a/{{app}}/{{tenant}}//odata/standard.odata/InformationRegister_ЦеныНоменклатурыДокументов?{{format}}&$expand=Валюта, Номенклатура&$select=Номенклатура/Description,Номенклатура/Ref_Key, Цена, ЦенаВключаетНДС, Валюта/Description, Валюта/Code&$filter=СпособЗаполненияЦены eq '{{type_price}}'
+Authorization: {{authorization}}
+ 
+#### 4.1.2 Получение цены конкретной номенклатуры
+###
+### Используемые переменные
+### item_key_ref - guid номенклатуры, для которой запрашивается цена
+@item_key_ref = be634a51-0bd9-11e8-b076-005056897fe1
+ 
+GET {{server}}/a/{{app}}/{{tenant}}//odata/standard.odata/InformationRegister_ЦеныНоменклатурыДокументов(Номенклатура_Key=guid'{{item_key_ref}}',СпособЗаполненияЦены='{{type_price}}')?{{format}}&$select=Цена, ЦенаВключаетНДС
+Authorization: {{authorization}}
